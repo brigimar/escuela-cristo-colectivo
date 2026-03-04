@@ -14,6 +14,14 @@ const VideoRow = z.object({
 
 export type VideoRow = z.infer<typeof VideoRow>
 
+const SiteStateRow = z.object({
+  is_live: z.boolean(),
+  live_video_id: z.string().nullable(),
+  updated_at: z.string()
+})
+
+export type SiteStateRow = z.infer<typeof SiteStateRow>
+
 export async function listVideos(): Promise<VideoRow[]> {
   const res = await supabasePublic
     .from("videos")
@@ -35,6 +43,43 @@ export async function getVideoBySlug(slug: string): Promise<VideoRow | null> {
   if (res.error) throw new Error(res.error.message)
   if (!res.data) return null
   return VideoRow.parse(res.data)
+}
+
+export async function getVideoByYoutubeId(youtube_video_id: string): Promise<VideoRow | null> {
+  const res = await supabasePublic
+    .from("videos")
+    .select("youtube_video_id, slug, title, description, published_at, updated_at, thumbnail_url, channel_id")
+    .eq("youtube_video_id", youtube_video_id)
+    .maybeSingle()
+
+  if (res.error) throw new Error(res.error.message)
+  if (!res.data) return null
+  return VideoRow.parse(res.data)
+}
+
+export async function getLatestVideo(): Promise<VideoRow | null> {
+  const res = await supabasePublic
+    .from("videos")
+    .select("youtube_video_id, slug, title, description, published_at, updated_at, thumbnail_url, channel_id")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (res.error) throw new Error(res.error.message)
+  if (!res.data) return null
+  return VideoRow.parse(res.data)
+}
+
+export async function getSiteState(): Promise<SiteStateRow | null> {
+  const res = await supabasePublic
+    .from("site_state")
+    .select("is_live, live_video_id, updated_at")
+    .eq("id", true)
+    .maybeSingle()
+
+  if (res.error) throw new Error(res.error.message)
+  if (!res.data) return null
+  return SiteStateRow.parse(res.data)
 }
 
 export type VideoSitemapEntry = {
