@@ -54,6 +54,26 @@ select * from cron.job;
 select * from cron.job_run_details order by start_time desc;
 ```
 
+## Verification
+- Operational status: Supabase cron and HTTP-triggered ingestion are active and producing `sync_runs` + `videos` updates.
+- `sync_runs` uses `started_at` / `finished_at` timestamps (not `created_at`).
+
+```sql
+select * from cron.job;
+```
+
+```sql
+select * from cron.job_run_details order by start_time desc limit 10;
+```
+
+```sql
+select id, source, status, started_at from public.sync_runs order by started_at desc limit 10;
+```
+
+```sql
+select count(*) from public.videos;
+```
+
 ## Security
 - Endpoint requires header `x-cron-secret` matching `process.env.CRON_SECRET`.
 - Unauthorized calls receive HTTP 401.
