@@ -74,6 +74,12 @@ select id, source, status, started_at from public.sync_runs order by started_at 
 select count(*) from public.videos;
 ```
 
+## Web Content Publishing
+- `PreguntasPublic` reads from `public.video_questions` with:
+  - `is_selected = true`
+  - `is_hidden = false`
+- Video category filtering reads `public.categories.slug` and joins videos through `public.video_categories` on `youtube_video_id`.
+
 ## Security
 - Endpoint requires header `x-cron-secret` matching `process.env.CRON_SECRET`.
 - Unauthorized calls receive HTTP 401.
