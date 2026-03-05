@@ -16,16 +16,19 @@ type TelegramUpdate = {
 
 async function sendTelegramMessage(chatId: number, text: string) {
   const { TELEGRAM_BOT_TOKEN } = loadServerEnv()
-  if (!TELEGRAM_BOT_TOKEN) return
+  if (!TELEGRAM_BOT_TOKEN) {
+    throw new Error("Missing TELEGRAM_BOT_TOKEN")
+  }
 
-  try {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text }),
-    })
-  } catch {
-    // no-op: webhook should still return 200
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`Telegram sendMessage failed: ${res.status} ${body}`)
   }
 }
 
@@ -78,6 +81,14 @@ async function downloadTelegramFile(filePath: string): Promise<Buffer | null> {
 }
 
 export async function POST(req: Request) {
+  const { TELEGRAM_SECRET_TOKEN } = loadServerEnv()
+  if (TELEGRAM_SECRET_TOKEN) {
+    const secret = req.headers.get("x-telegram-bot-api-secret-token")
+    if (secret !== TELEGRAM_SECRET_TOKEN) {
+      return new Response("unauthorized", { status: 401 })
+    }
+  }
+
   let update: TelegramUpdate | null = null
   try {
     update = (await req.json()) as TelegramUpdate
@@ -94,6 +105,25 @@ export async function POST(req: Request) {
   const audio = msg?.audio
 
   if (!chatId || !fromId) return new Response("ok")
+
+  if (text) {
+    if (text === "/start") {
+      await sendTelegramMessage(chatId, "Bot activo ✅")
+      return new Response("ok")
+    }
+
+    const owner = isOwner(fromId)
+    if (!owner) {
+      await sendTelegramMessage(chatId, "No autorizado")
+      return new Response("ok")
+    }
+
+    const supportedCommand = text.startsWith("/recomendar") || text.startsWith("/audios")
+    if (!supportedCommand) {
+      await sendTelegramMessage(chatId, "Recibido ✅")
+      return new Response("ok")
+    }
+  }
 
   if (!isOwner(fromId)) {
     if (text.startsWith("/recomendar") || text.startsWith("/audios") || voice || audio) {
