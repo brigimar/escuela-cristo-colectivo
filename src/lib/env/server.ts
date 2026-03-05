@@ -18,6 +18,7 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN: optionalNonEmptyString,
   TELEGRAM_SECRET_TOKEN: optionalNonEmptyString,
   TELEGRAM_ALLOWED_CHAT_IDS: optionalString,
+  TELEGRAM_OWNER_USER_ID: optionalString,
   CRON_SECRET: optionalNonEmptyString,
   NODE_ENV: optionalString,
   LOG_LEVEL: optionalString
