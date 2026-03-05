@@ -120,8 +120,19 @@ export async function POST(req: Request) {
 
     const supportedCommand = text.startsWith("/recomendar") || text.startsWith("/audios")
     if (!supportedCommand) {
-      await sendTelegramMessage(chatId, "Recibido ✅")
-      return new Response("ok")
+      const pendingForTitle = await supabaseService
+        .from("telegram_pending_audio")
+        .select("chat_id")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (!pendingForTitle.error && pendingForTitle.data) {
+        // Hay pending activo: dejar que el flujo de publicación procese este texto como título.
+      } else {
+        await sendTelegramMessage(chatId, "Recibido ✅")
+        return new Response("ok")
+      }
     }
   }
 
@@ -205,6 +216,7 @@ export async function POST(req: Request) {
     .from("telegram_pending_audio")
     .select("chat_id, from_id, file_id, file_unique_id, source_kind, mime_type, size_bytes")
     .eq("chat_id", chatId)
+    .eq("from_id", fromId)
     .maybeSingle()
 
   if (!pending.error && pending.data) {
