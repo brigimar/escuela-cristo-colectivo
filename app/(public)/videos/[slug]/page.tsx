@@ -30,13 +30,16 @@ export default async function VideoDetail({ params }: Props) {
   if (!video) return notFound()
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-3xl font-black leading-tight">{video.title}</h1>
+    <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-black leading-tight sm:text-4xl">{video.title}</h1>
       {video.published_at ? <p className="mt-2 text-sm text-slate-600">{new Date(video.published_at).toLocaleString("es-AR")}</p> : null}
-      <div className="embed-16x9">
+      <div className="mt-6 aspect-video w-full overflow-hidden rounded-2xl bg-black">
         <iframe
           src={`https://www.youtube.com/embed/${video.youtube_video_id}`}
           title={video.title}
+          className="h-full w-full"
+          loading="lazy"
+          referrerPolicy="strict-origin-when-cross-origin"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
         />
@@ -53,7 +56,7 @@ export default async function VideoDetail({ params }: Props) {
       </p>
 
       {video.description ? (
-        <pre className="mt-6 whitespace-pre-wrap text-sm leading-relaxed text-slate-800">{video.description}</pre>
+        <pre className="mt-6 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-800">{video.description}</pre>
       ) : (
         <p className="mt-6 text-sm text-slate-600">Sin descripción.</p>
       )}

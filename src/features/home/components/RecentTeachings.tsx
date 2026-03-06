@@ -79,23 +79,28 @@ export function RecentTeachings({
   if (items.length === 0) return null
 
   return (
-    <section aria-labelledby="recent-teachings" className="py-14 sm:py-20">
+    <section
+      aria-labelledby="recent-teachings"
+      className="bg-[#17130f] py-14 sm:py-20"
+    >
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <div className="text-center">
-          <div className="text-xs font-semibold tracking-widest uppercase text-neutral-500">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c9a95a]">
             Lo más reciente
           </div>
+
           <h2
             id="recent-teachings"
-            className="mt-3 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl"
+            className="mt-3 text-3xl font-semibold tracking-tight text-[#f7f1e8] sm:text-4xl"
           >
             {title}
           </h2>
-          <p className="mt-3 text-base text-neutral-600 sm:text-lg">{subtitle}</p>
+
+          <p className="mt-3 text-base text-[#c9bca8] sm:text-lg">
+            {subtitle}
+          </p>
         </div>
 
-        {/* Grid */}
         <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {items.map((v) => {
             const dateLabel = formatDate(v.published_at)
@@ -106,8 +111,8 @@ export function RecentTeachings({
               "data:image/svg+xml;charset=utf-8," +
                 encodeURIComponent(
                   `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">
-                    <rect width="100%" height="100%" fill="#eee"/>
-                    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#999" font-family="Arial" font-size="36">
+                    <rect width="100%" height="100%" fill="#2a241d"/>
+                    <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#b7ab96" font-family="Arial" font-size="36">
                       Sin miniatura
                     </text>
                   </svg>`
@@ -118,16 +123,15 @@ export function RecentTeachings({
                 <Link
                   href={`/videos/${v.slug}`}
                   className={[
-                    "relative flex h-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white",
-                    "shadow-[0_8px_30px_rgba(0,0,0,0.06)]",
+                    "relative flex h-full flex-col overflow-hidden rounded-xl border border-[#3a3025] bg-[#211b15]",
+                    "shadow-[0_14px_34px_rgba(0,0,0,0.26)]",
                     "transition-all duration-300 ease-out",
-                    "hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
+                    "hover:-translate-y-1 hover:border-[#6e5831] hover:shadow-[0_20px_44px_rgba(0,0,0,0.34)]",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a95a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#17130f]"
                   ].join(" ")}
                 >
-                  {/* Thumbnail */}
                   <div className="p-3">
-                    <div className="relative overflow-hidden rounded-xl bg-neutral-200">
+                    <div className="relative overflow-hidden rounded-lg bg-[#2a221a]">
                       <div className="relative aspect-video w-full">
                         <Image
                           src={thumb}
@@ -139,29 +143,28 @@ export function RecentTeachings({
                         />
                       </div>
 
-                      {/* Overlay */}
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/0 opacity-100" />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#120f0c]/60 via-transparent to-transparent" />
 
-                      {/* Play chip */}
-                      <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-neutral-900 shadow-sm">
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-md bg-[#f4ead6]/92 px-2.5 py-1.5 text-xs font-medium text-[#241b12] shadow-sm ring-1 ring-[#ccb07a]/40">
                         <IconPlay className="h-4 w-4" />
                         Ver
                       </div>
 
-                      {/* Status badges */}
-                      <div className="absolute right-3 top-3 flex max-w-[70%] flex-wrap justify-end gap-1.5">
+                      <div className="absolute right-3 top-3 flex max-w-[72%] flex-wrap justify-end gap-1.5">
                         {showLiveBadge ? (
-                          <span className="inline-flex items-center rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-md bg-[#b5261a] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                             Live
                           </span>
                         ) : null}
+
                         {showNewBadge ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-600 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-md bg-[#55663a] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                             Nuevo
                           </span>
                         ) : null}
+
                         {v.category_name ? (
-                          <span className="inline-flex items-center rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-medium text-neutral-800 ring-1 ring-black/10">
+                          <span className="inline-flex items-center rounded-md bg-[#efe2c8]/92 px-2 py-1 text-[10px] font-medium text-[#4a3b26] ring-1 ring-[#ccb07a]/35">
                             {v.category_name}
                           </span>
                         ) : null}
@@ -169,18 +172,17 @@ export function RecentTeachings({
                     </div>
                   </div>
 
-                  {/* Body */}
-                  <div className="px-4 pb-4 pt-2 overflow-hidden flex-1 flex flex-col justify-between">
-                    <h3 className="text-sm font-semibold leading-5 text-neutral-900 line-clamp-2 break-words min-h-[2.6rem]">
+                  <div className="flex flex-1 flex-col justify-between overflow-hidden px-4 pb-4 pt-2">
+                    <h3 className="min-w-0 text-sm font-semibold leading-5 text-[#f5efe6] line-clamp-2 break-words">
                       {v.title}
                     </h3>
 
                     <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0 text-xs text-neutral-500 truncate">
+                      <div className="min-w-0 truncate text-xs text-[#a99a84]">
                         {dateLabel ? dateLabel : "—"}
                       </div>
 
-                      <div className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-neutral-800">
+                      <div className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[#dcc184]">
                         Ver
                         <IconArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
                       </div>
@@ -192,15 +194,14 @@ export function RecentTeachings({
           })}
         </div>
 
-        {/* Footer CTA */}
         <div className="mt-10 flex justify-center">
           <Link
             href={ctaHref}
             className={[
-              "inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-5 py-3",
-              "text-sm font-medium text-neutral-900 ring-1 ring-black/5 shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
-              "transition-all duration-300 hover:-translate-y-0.5 hover:border-neutral-300 hover:bg-neutral-50 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
+              "inline-flex items-center gap-2 rounded-lg border border-[#b99443] bg-[linear-gradient(180deg,#e2c267_0%,#cfa748_100%)] px-5 py-3",
+              "text-sm font-semibold text-[#22180e] shadow-[0_12px_28px_rgba(0,0,0,0.25)]",
+              "transition-all duration-300 hover:-translate-y-0.5 hover:brightness-[1.04] hover:shadow-[0_16px_36px_rgba(0,0,0,0.32)]",
+              "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d2b56b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#17130f]"
             ].join(" ")}
           >
             <IconPlay className="h-5 w-5" />

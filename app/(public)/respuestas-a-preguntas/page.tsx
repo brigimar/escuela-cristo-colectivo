@@ -36,8 +36,8 @@ export default async function RespuestasAPreguntasPage() {
           ) : (
             <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {questions.map((q) => (
-                <article key={q.id} className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
-                  <p className="line-clamp-3 text-sm leading-relaxed text-neutral-800">
+                <article key={q.id} className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                  <p className="line-clamp-3 break-words text-sm leading-relaxed text-neutral-800">
                     {q.text_display || "Pregunta sin texto disponible."}
                   </p>
                   <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
@@ -62,8 +62,8 @@ export default async function RespuestasAPreguntasPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {audios.map((a) => (
-                <article key={a.id} className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
-                  <h3 className="text-base font-semibold text-neutral-900">{a.title}</h3>
+                <article key={a.id} className="min-w-0 rounded-2xl border border-neutral-200 bg-white p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)]">
+                  <h3 className="text-base font-semibold text-neutral-900 break-words">{a.title}</h3>
                   <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
                     <span>{formatDate(a.created_at) || "—"}</span>
                     {a.created_by ? <span>{a.created_by}</span> : null}
@@ -86,4 +86,3 @@ export default async function RespuestasAPreguntasPage() {
     </main>
   )
 }
-
