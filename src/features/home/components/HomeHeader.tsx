@@ -41,8 +41,8 @@ export function HomeHeader() {
                 className="object-contain p-1"
               />
             </span>
+          </Link>
 
-            
           <button
             type="button"
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#d6c39b] bg-[#fffaf0] text-[#2f2618] transition hover:bg-[#f3e7cd] lg:hidden"
