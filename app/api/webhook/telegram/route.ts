@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache"
 import { loadServerEnv } from "@/lib/env/server"
 import { setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
 import {
@@ -282,6 +283,7 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
+    revalidatePath("/")
     await sendTelegramMessage(
       chatId,
       `Recomendado web actualizado:\n${selected.index}. ${selected.title}\nID: ${selected.youtube_video_id}`
@@ -305,6 +307,7 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
+    revalidatePath("/")
     await sendTelegramMessage(chatId, "Video recomendado actualizado ✅")
     return new Response("ok")
   }
