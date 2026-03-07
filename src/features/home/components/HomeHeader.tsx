@@ -42,16 +42,7 @@ export function HomeHeader() {
               />
             </span>
 
-            <span className="min-w-0">
-              <span className="block truncate text-sm font-semibold tracking-tight text-[#221c12] sm:text-base lg:text-lg">
-                Escuela de Cristo
-              </span>
-              <span className="hidden text-xs text-[#6b5a3a] sm:block">
-                Palabra, comunión y formación espiritual
-              </span>
-            </span>
-          </Link>
-
+            
           <button
             type="button"
             className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#d6c39b] bg-[#fffaf0] text-[#2f2618] transition hover:bg-[#f3e7cd] lg:hidden"
