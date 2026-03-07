@@ -54,6 +54,23 @@ export type TelegramEditorialListContext = {
   expires_at: string
 }
 
+export type VideoEditorialDetail = {
+  youtube_video_id: string
+  slug: string | null
+  title: string
+  description: string | null
+  published_at: string | null
+}
+
+export type VideoEditorialClassificationRow = {
+  dimension_code: string
+  term_slug: string
+  term_label: string
+  source_kind: string
+  source_ref: string | null
+  confidence: number
+}
+
 export const TELEGRAM_EDITORIAL_CATEGORIES: Array<{
   slug: EditorialTelegramCategory
   label: string
@@ -174,6 +191,145 @@ export async function getVideoSummaryByYoutubeId(youtubeVideoId: string): Promis
   }
 }
 
+export async function listLatestVideoSummaries(limit = 10): Promise<EditorialVideoSummary[]> {
+  const res = await supabaseService
+    .from("videos")
+    .select("youtube_video_id, title, published_at")
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(limit)
+
+  if (res.error || !Array.isArray(res.data)) return []
+
+  return res.data
+    .map((row: any) => ({
+      youtube_video_id: typeof row?.youtube_video_id === "string" ? row.youtube_video_id : "",
+      title: typeof row?.title === "string" ? row.title : "Sin título",
+      published_at: typeof row?.published_at === "string" ? row.published_at : null,
+    }))
+    .filter((row) => row.youtube_video_id.length > 0)
+}
+
+export async function searchVideoSummariesByTitle(query: string, limit = 10): Promise<EditorialVideoSummary[]> {
+  const normalized = query.trim()
+  if (!normalized) return []
+
+  const res = await supabaseService
+    .from("videos")
+    .select("youtube_video_id, title, published_at")
+    .ilike("title", `%${normalized}%`)
+    .order("published_at", { ascending: false, nullsFirst: false })
+    .limit(limit)
+
+  if (res.error || !Array.isArray(res.data)) return []
+
+  return res.data
+    .map((row: any) => ({
+      youtube_video_id: typeof row?.youtube_video_id === "string" ? row.youtube_video_id : "",
+      title: typeof row?.title === "string" ? row.title : "Sin título",
+      published_at: typeof row?.published_at === "string" ? row.published_at : null,
+    }))
+    .filter((row) => row.youtube_video_id.length > 0)
+}
+
+export async function getVideoEditorialDetailByYoutubeId(youtubeVideoId: string): Promise<VideoEditorialDetail | null> {
+  const res = await supabaseService
+    .from("videos")
+    .select("youtube_video_id, slug, title, description, published_at")
+    .eq("youtube_video_id", youtubeVideoId)
+    .maybeSingle()
+
+  if (res.error || !res.data || typeof res.data.youtube_video_id !== "string") return null
+
+  return {
+    youtube_video_id: res.data.youtube_video_id,
+    slug: typeof res.data.slug === "string" ? res.data.slug : null,
+    title: typeof res.data.title === "string" ? res.data.title : "Sin título",
+    description: typeof res.data.description === "string" ? res.data.description : null,
+    published_at: typeof res.data.published_at === "string" ? res.data.published_at : null,
+  }
+}
+
+export async function listVideoEditorialClassificationByYoutubeId(
+  youtubeVideoId: string
+): Promise<VideoEditorialClassificationRow[]> {
+  const videoRes = await supabaseService
+    .from("videos")
+    .select("id")
+    .eq("youtube_video_id", youtubeVideoId)
+    .maybeSingle()
+
+  if (videoRes.error || !videoRes.data?.id) return []
+
+  const [dimensionsRes, termsRes, currentRes] = await Promise.all([
+    supabaseService.from("editorial_dimensions").select("id, code"),
+    supabaseService.from("editorial_terms").select("id, slug, label"),
+    supabaseService
+      .from("video_editorial_classification_current")
+      .select("dimension_id, term_id, source_kind, source_ref, confidence")
+      .eq("video_id", videoRes.data.id),
+  ])
+
+  if (dimensionsRes.error || termsRes.error || currentRes.error) return []
+
+  const dimensionById = new Map((dimensionsRes.data ?? []).map((row: any) => [row.id, row.code]))
+  const termById = new Map((termsRes.data ?? []).map((row: any) => [row.id, { slug: row.slug, label: row.label }]))
+
+  return (currentRes.data ?? [])
+    .map((row: any) => {
+      const dimensionCode = dimensionById.get(row.dimension_id)
+      const term = termById.get(row.term_id)
+      if (!dimensionCode || !term) return null
+      return {
+        dimension_code: dimensionCode,
+        term_slug: term.slug,
+        term_label: term.label,
+        source_kind: typeof row?.source_kind === "string" ? row.source_kind : "",
+        source_ref: typeof row?.source_ref === "string" ? row.source_ref : null,
+        confidence: typeof row?.confidence === "number" ? row.confidence : Number(row?.confidence ?? 0),
+      }
+    })
+    .filter((row): row is VideoEditorialClassificationRow => Boolean(row))
+}
+
+export async function listVideosWithoutSeriesCollection(limit = 10): Promise<EditorialVideoSummary[]> {
+  const dimensionRes = await supabaseService
+    .from("editorial_dimensions")
+    .select("id")
+    .eq("code", "series_collection")
+    .maybeSingle()
+
+  if (dimensionRes.error || !dimensionRes.data?.id) return []
+
+  const [videosRes, classifiedRes] = await Promise.all([
+    supabaseService
+      .from("videos")
+      .select("id, youtube_video_id, title, published_at")
+      .order("published_at", { ascending: false, nullsFirst: false }),
+    supabaseService
+      .from("video_editorial_classification_current")
+      .select("video_id")
+      .eq("dimension_id", dimensionRes.data.id),
+  ])
+
+  if (videosRes.error || classifiedRes.error || !Array.isArray(videosRes.data)) return []
+
+  const classifiedIds = new Set(
+    (classifiedRes.data ?? [])
+      .map((row: any) => (typeof row?.video_id === "string" ? row.video_id : ""))
+      .filter((value) => value.length > 0)
+  )
+
+  return videosRes.data
+    .filter((row: any) => !classifiedIds.has(typeof row?.id === "string" ? row.id : ""))
+    .slice(0, limit)
+    .map((row: any) => ({
+      youtube_video_id: typeof row?.youtube_video_id === "string" ? row.youtube_video_id : "",
+      title: typeof row?.title === "string" ? row.title : "Sin título",
+      published_at: typeof row?.published_at === "string" ? row.published_at : null,
+    }))
+    .filter((row) => row.youtube_video_id.length > 0)
+}
+
 export async function saveTelegramEditorialListContext(
   chatId: number,
   fromId: number,
@@ -239,4 +395,61 @@ export async function getActiveTelegramEditorialListContext(
     items: parseContextItems(row.items),
     expires_at: typeof row.expires_at === "string" ? row.expires_at : new Date().toISOString(),
   }
+}
+
+export async function saveVideoSearchPrompt(chatId: number, fromId: number): Promise<void> {
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
+  const deactivateRes = await supabaseService
+    .from("telegram_list_contexts")
+    .update({ is_active: false })
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "video_search_prompt")
+    .eq("is_active", true)
+
+  if (deactivateRes.error) throw new Error(deactivateRes.error.message)
+
+  const insertRes = await supabaseService
+    .from("telegram_list_contexts")
+    .insert({
+      chat_id: chatId,
+      from_id: fromId,
+      context_type: "video_search_prompt",
+      category_slug: "search",
+      list_offset: 0,
+      items: [],
+      expires_at: expiresAt,
+      is_active: true,
+    })
+
+  if (insertRes.error) throw new Error(insertRes.error.message)
+}
+
+export async function hasActiveVideoSearchPrompt(chatId: number, fromId: number): Promise<boolean> {
+  const res = await supabaseService
+    .from("telegram_list_contexts")
+    .select("id")
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "video_search_prompt")
+    .eq("is_active", true)
+    .gt("expires_at", new Date().toISOString())
+    .limit(1)
+    .maybeSingle()
+
+  if (res.error) return false
+  return Boolean(res.data?.id)
+}
+
+export async function clearVideoSearchPrompt(chatId: number, fromId: number): Promise<void> {
+  const res = await supabaseService
+    .from("telegram_list_contexts")
+    .update({ is_active: false })
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "video_search_prompt")
+    .eq("is_active", true)
+
+  if (res.error) throw new Error(res.error.message)
 }

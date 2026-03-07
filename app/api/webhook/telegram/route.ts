@@ -2,25 +2,103 @@ import { revalidatePath } from "next/cache"
 import { loadServerEnv } from "@/lib/env/server"
 import { getVideoRecommendation, setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
 import {
+  clearAudioEditTitlePrompt,
+  clearAudioSearchPrompt,
+  getActiveAudioEditTitlePrompt,
+  getRespuestaAudioById,
+  hasActiveAudioSearchPrompt,
+  listRespuestasAudio,
+  saveAudioEditTitlePrompt,
+  saveAudioSearchPrompt,
+  searchRespuestasAudioByTitle,
+  updateRespuestaAudioTitle,
+} from "@/features/audio/queries"
+import {
+  clearReadingEditorContext,
+  getDailyReadingCurrent,
+  getReadingEditorContext,
+  publishDailyReadingCurrent,
+  saveReadingEditorContext,
+} from "@/features/reading/queries"
+import {
+  createLibraryPdf,
+  getLibraryPdfById,
+  listLibraryPdfsByVisibility,
+  setLibraryPdfPublished,
+} from "@/features/library/queries"
+import {
+  getAudienceQuestionById,
+  hideAudienceQuestionById,
+  listHiddenAudienceQuestions,
+  listPendingAudienceQuestions,
+  listSelectedAudienceQuestionsForOwner,
+  restoreAudienceQuestionById,
+  selectAudienceQuestionById,
+} from "@/features/questions/queries"
+import {
+  clearVideoSearchPrompt,
   getActiveTelegramEditorialListContext,
   getTelegramEditorialCategory,
+  getVideoEditorialDetailByYoutubeId,
   getVideoSummaryByYoutubeId,
+  hasActiveVideoSearchPrompt,
+  listLatestVideoSummaries,
+  listVideoEditorialClassificationByYoutubeId,
   listVideosByTelegramEditorialCategory,
+  listVideosWithoutSeriesCollection,
+  saveVideoSearchPrompt,
   saveTelegramEditorialListContext,
-  TELEGRAM_EDITORIAL_CATEGORIES,
+  searchVideoSummariesByTitle,
 } from "@/features/videos/editorial-queries"
 import { supabaseService } from "@/lib/supabase/client-service"
 import {
+  buildOwnerHelpText,
   buildOwnerMainMenuText,
-  buildOwnerPlaceholderKeyboard,
-  buildOwnerPlaceholderText,
+  buildOwnerAudioAwaitingFileText,
+  buildOwnerAudioAwaitingTitleText,
+  buildOwnerAudioConfirmText,
+  buildOwnerAudioText,
+  buildOwnerAnswerDetailKeyboard,
+  buildOwnerAnswerListKeyboard,
+  buildOwnerAnswersSearchText,
+  buildOwnerAnswersText,
+  buildOwnerPdfAwaitingFieldText,
+  buildOwnerPdfAwaitingFileText,
+  buildOwnerPdfConfirmText,
+  buildOwnerPdfDetailKeyboard,
+  buildOwnerPdfListKeyboard,
+  buildOwnerPdfsText,
+  buildOwnerReadingEditorKeyboard,
+  buildOwnerReadingEditorText,
+  buildOwnerReadingText,
+  buildOwnerQuestionDetailKeyboard,
+  buildOwnerQuestionListKeyboard,
+  buildOwnerQuestionsText,
   buildOwnerRecommendCategoriesKeyboard,
+  buildOwnerVideoClassificationKeyboard,
+  buildOwnerVideoDetailKeyboard,
+  buildOwnerVideoListKeyboard,
   buildOwnerRecommendConfirmKeyboard,
   buildOwnerRecommendCurrentKeyboard,
   buildOwnerRecommendMenuText,
+  buildOwnerStatusText,
   buildOwnerRecommendVideoListKeyboard,
+  buildOwnerVideosSearchText,
+  buildOwnerVideosText,
+  OWNER_AUDIO_AWAITING_FILE_BUTTONS,
+  OWNER_AUDIO_CONFIRM_BUTTONS,
+  OWNER_AUDIO_MENU_BUTTONS,
+  OWNER_ANSWERS_MENU_BUTTONS,
+  OWNER_HELP_MENU_BUTTONS,
   OWNER_MAIN_MENU_BUTTONS,
+  OWNER_PDF_AWAITING_FILE_BUTTONS,
+  OWNER_PDF_CONFIRM_BUTTONS,
+  OWNER_PDFS_MENU_BUTTONS,
+  OWNER_QUESTIONS_MENU_BUTTONS,
+  OWNER_READING_MENU_BUTTONS,
   OWNER_RECOMMEND_MENU_BUTTONS,
+  OWNER_STATUS_MENU_BUTTONS,
+  OWNER_VIDEOS_MENU_BUTTONS,
 } from "@/lib/telegram/owner-menu"
 
 type TelegramMessage = {
@@ -30,6 +108,7 @@ type TelegramMessage = {
   text?: string
   voice?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number }
   audio?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number }
+  document?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number; file_name?: string }
 }
 
 type TelegramCallbackQuery = {
@@ -105,6 +184,36 @@ function formatTelegramDate(value: string | null) {
   return value ? value.slice(0, 10) : "—"
 }
 
+function buildVideoListText(title: string, videos: Array<{ title: string; published_at: string | null; youtube_video_id: string }>) {
+  return `${title}\n\n${videos
+    .map((video, index) => `${index + 1}. ${video.title}\n${formatTelegramDate(video.published_at)}\nID: ${video.youtube_video_id}`)
+    .join("\n\n")}`
+}
+
+function buildQuestionListText(
+  title: string,
+  questions: Array<{ author_name?: string | null; text_display?: string | null; published_at?: string | null; comment_id?: string | null }>
+) {
+  return `${title}\n\n${questions
+    .map(
+      (question, index) =>
+        `${index + 1}. ${question.author_name || "Anonimo"}\n${question.text_display || "Sin texto"}\n${formatTelegramDate(question.published_at || null)}\nComment ID: ${question.comment_id || "—"}`
+    )
+    .join("\n\n")}`
+}
+
+function buildAnswerListText(title: string, answers: Array<{ title: string; created_at: string; created_by: string | null }>) {
+  return `${title}\n\n${answers
+    .map((answer, index) => `${index + 1}. ${answer.title}\n${formatTelegramDate(answer.created_at)}\n${answer.created_by || "—"}`)
+    .join("\n\n")}`
+}
+
+function trimForTelegram(value: string | null | undefined, max = 800) {
+  const text = (value || "").trim()
+  if (!text) return "—"
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
 function getOwnerId(): number {
   const { TELEGRAM_OWNER_USER_ID } = loadServerEnv()
   const ownerId = TELEGRAM_OWNER_USER_ID ? Number(TELEGRAM_OWNER_USER_ID) : NaN
@@ -153,6 +262,119 @@ async function downloadTelegramFile(filePath: string): Promise<Buffer | null> {
   }
 }
 
+async function clearPendingAudio(chatId: number) {
+  await supabaseService.from("telegram_pending_audio").delete().eq("chat_id", chatId)
+}
+
+async function clearPendingPdf(chatId: number) {
+  await supabaseService.from("telegram_pending_pdf").delete().eq("chat_id", chatId)
+}
+
+async function publishPendingAudio(params: {
+  chatId: number
+  fromId: number
+  fromUsername: string | null
+  fileId: string
+  sourceKind: string
+  mimeType: string | null
+  sizeBytes: number | null
+  title: string
+}) {
+  const filePath = await getTelegramFilePath(params.fileId)
+  if (!filePath) return { ok: false as const, reason: "file_path" }
+
+  const bytes = await downloadTelegramFile(filePath)
+  if (!bytes) return { ok: false as const, reason: "download" }
+
+  const now = new Date()
+  const yyyy = String(now.getUTCFullYear())
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0")
+  const ext = extensionFromMime(params.mimeType, params.sourceKind)
+  const uuid = crypto.randomUUID()
+  const bucket = "respuestas-audio"
+  const storagePath = `${yyyy}/${mm}/${uuid}.${ext}`
+  const contentType = params.mimeType || (params.sourceKind === "voice" ? "audio/ogg" : "application/octet-stream")
+
+  const upload = await supabaseService.storage
+    .from(bucket)
+    .upload(storagePath, bytes, { contentType, upsert: false })
+
+  if (upload.error) return { ok: false as const, reason: "upload" }
+
+  const publicUrlData = supabaseService.storage.from(bucket).getPublicUrl(storagePath)
+  const publicUrl = publicUrlData?.data?.publicUrl ?? null
+  const createdBy = params.fromUsername ? `@${params.fromUsername}` : `tg:${params.fromId}`
+
+  const insertRes = await supabaseService
+    .from("respuestas_audio")
+    .insert({
+      title: params.title,
+      storage_bucket: bucket,
+      storage_path: storagePath,
+      public_url: publicUrl,
+      mime_type: params.mimeType,
+      size_bytes: params.sizeBytes,
+      created_by: createdBy,
+    })
+
+  if (insertRes.error) return { ok: false as const, reason: "insert" }
+
+  await clearPendingAudio(params.chatId)
+  return { ok: true as const }
+}
+
+async function publishPendingPdf(params: {
+  chatId: number
+  fromId: number
+  fromUsername: string | null
+  fileId: string
+  mimeType: string | null
+  sizeBytes: number | null
+  title: string
+  description: string
+  author: string
+}) {
+  const filePath = await getTelegramFilePath(params.fileId)
+  if (!filePath) return { ok: false as const, reason: "file_path" }
+
+  const bytes = await downloadTelegramFile(filePath)
+  if (!bytes) return { ok: false as const, reason: "download" }
+
+  const now = new Date()
+  const yyyy = String(now.getUTCFullYear())
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0")
+  const uuid = crypto.randomUUID()
+  const bucket = "libros-pdf"
+  const storagePath = `${yyyy}/${mm}/${uuid}.pdf`
+  const contentType = "application/pdf"
+
+  const upload = await supabaseService.storage
+    .from(bucket)
+    .upload(storagePath, bytes, { contentType, upsert: false })
+
+  if (upload.error) return { ok: false as const, reason: "upload" }
+
+  const publicUrlData = supabaseService.storage.from(bucket).getPublicUrl(storagePath)
+  const publicUrl = publicUrlData?.data?.publicUrl ?? null
+  const actor = params.fromUsername ? `@${params.fromUsername}` : `tg:${params.fromId}`
+
+  const insertOk = await createLibraryPdf({
+    title: params.title,
+    description: params.description,
+    author: params.author,
+    storage_path: storagePath,
+    public_url: publicUrl,
+    mime_type: params.mimeType || "application/pdf",
+    size_bytes: params.sizeBytes,
+    actor,
+  })
+
+  if (!insertOk) return { ok: false as const, reason: "insert" }
+
+  await clearPendingPdf(params.chatId)
+  return { ok: true as const }
+}
+
 export async function POST(req: Request) {
   const { TELEGRAM_SECRET_TOKEN } = loadServerEnv()
   if (TELEGRAM_SECRET_TOKEN) {
@@ -196,6 +418,7 @@ export async function POST(req: Request) {
   const callbackMessageId = typeof callbackMessage?.message_id === "number" ? callbackMessage.message_id : null
   const voice = msg?.voice
   const audio = msg?.audio
+  const document = msg?.document
 
   if (!chatId || !fromId) return new Response("ok")
 
@@ -248,6 +471,931 @@ export async function POST(req: Request) {
         messageId: callbackMessageId,
         text: textCurrent,
         replyMarkup: buildOwnerRecommendCurrentKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:audio") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerAudioText(),
+        replyMarkup: OWNER_AUDIO_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:answers") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerAnswersText(),
+        replyMarkup: OWNER_ANSWERS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:answers:latest") {
+      const answers = await listRespuestasAudio(10)
+      const textAnswers = answers.length > 0 ? buildAnswerListText("Ultimas respuestas", answers) : "No hay respuestas publicadas."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textAnswers,
+        replyMarkup: answers.length > 0 ? buildOwnerAnswerListKeyboard(answers, "owner:answers") : OWNER_ANSWERS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:answers:search") {
+      await saveAudioSearchPrompt(chatId, fromId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerAnswersSearchText(),
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: "Volver", callback_data: "owner:answers" }],
+            [{ text: "Menu principal", callback_data: "owner:main" }],
+          ],
+        },
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:answers:detail:")) {
+      const answerId = callbackData.split(":")[3] || ""
+      const answer = await getRespuestaAudioById(answerId)
+
+      if (!answer) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar esa respuesta.",
+          replyMarkup: OWNER_ANSWERS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: [
+          "Detalle de respuesta",
+          "",
+          `Titulo: ${answer.title}`,
+          `Fecha: ${formatTelegramDate(answer.created_at)}`,
+          `Creado por: ${answer.created_by || "—"}`,
+          `Mime: ${answer.mime_type || "—"}`,
+          `Bytes: ${typeof answer.size_bytes === "number" ? answer.size_bytes : "—"}`,
+          `URL publica: ${answer.public_url || "—"}`,
+        ].join("\n"),
+        replyMarkup: buildOwnerAnswerDetailKeyboard(answer.id, "owner:answers"),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:answers:edit-title:")) {
+      const answerId = callbackData.split(":")[3] || ""
+      const answer = await getRespuestaAudioById(answerId)
+
+      if (!answer) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar esa respuesta.",
+          replyMarkup: OWNER_ANSWERS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await saveAudioEditTitlePrompt(chatId, fromId, answer.id)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Editar titulo\n\nTitulo actual: ${answer.title}\n\nEnvia ahora el nuevo titulo.`,
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: "Volver", callback_data: `owner:answers:detail:${answer.id}` }],
+            [{ text: "Menu principal", callback_data: "owner:main" }],
+          ],
+        },
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:reading") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerReadingText(),
+        replyMarkup: OWNER_READING_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:reading:current") {
+      const reading = await getDailyReadingCurrent()
+      const textReading = reading
+        ? [
+            "Lectura actual",
+            "",
+            reading.title,
+            "",
+            trimForTelegram(reading.content_md, 900),
+            "",
+            `Referencia: ${reading.reference_text || "—"}`,
+            `Autor: ${reading.author || "—"}`,
+            `Actualizada: ${formatTelegramDate(reading.updated_at)}`,
+          ].join("\n")
+        : "No hay una lectura publicada actualmente."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textReading,
+        replyMarkup: OWNER_READING_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:reading:create") {
+      await saveReadingEditorContext(chatId, fromId, {
+        mode: "create",
+        field: null,
+        draft: { title: "", content_md: "", reference_text: "", author: "" },
+      })
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerReadingEditorText({
+          mode: "create",
+          title: "",
+          content_md: "",
+          reference_text: "",
+          author: "",
+          awaitingField: null,
+        }),
+        replyMarkup: buildOwnerReadingEditorKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:reading:edit") {
+      const current = await getDailyReadingCurrent()
+      if (!current) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay lectura actual para editar. Usa Crear o reemplazar lectura.",
+          replyMarkup: OWNER_READING_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await saveReadingEditorContext(chatId, fromId, {
+        mode: "edit",
+        field: null,
+        draft: {
+          title: current.title,
+          content_md: current.content_md,
+          reference_text: current.reference_text || "",
+          author: current.author || "",
+        },
+      })
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerReadingEditorText({
+          mode: "edit",
+          title: current.title,
+          content_md: current.content_md,
+          reference_text: current.reference_text || "",
+          author: current.author || "",
+          awaitingField: null,
+        }),
+        replyMarkup: buildOwnerReadingEditorKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:reading:field:")) {
+      const fieldRaw = callbackData.split(":")[3] || ""
+      const field =
+        fieldRaw === "title" || fieldRaw === "content_md" || fieldRaw === "reference_text" || fieldRaw === "author"
+          ? fieldRaw
+          : null
+
+      const editor = await getReadingEditorContext(chatId, fromId)
+      if (!editor || !field) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay una edicion activa. Entra primero en Lectura del dia.",
+          replyMarkup: OWNER_READING_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await saveReadingEditorContext(chatId, fromId, { ...editor, field })
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerReadingEditorText({
+          mode: editor.mode,
+          title: editor.draft.title,
+          content_md: editor.draft.content_md,
+          reference_text: editor.draft.reference_text,
+          author: editor.draft.author,
+          awaitingField: field,
+        }),
+        replyMarkup: buildOwnerReadingEditorKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:reading:confirm") {
+      const editor = await getReadingEditorContext(chatId, fromId)
+      if (!editor) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay una lectura en edicion. Entra primero en Lectura del dia.",
+          replyMarkup: OWNER_READING_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+      const ok = await publishDailyReadingCurrent(editor.draft, actor)
+      if (!ok) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude publicar la lectura. Titulo y contenido son obligatorios.",
+          replyMarkup: buildOwnerReadingEditorKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      await clearReadingEditorContext(chatId, fromId)
+      revalidatePath("/")
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Lectura publicada ✅\n\n${editor.draft.title}`,
+        replyMarkup: OWNER_READING_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerPdfsText(),
+        replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:published") {
+      const items = await listLibraryPdfsByVisibility(true, 10)
+      const textItems =
+        items.length > 0
+          ? `Libros publicados\n\n${items.map((item, index) => `${index + 1}. ${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "—"}`).join("\n\n")}`
+          : "No hay libros publicados."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textItems,
+        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:hidden") {
+      const items = await listLibraryPdfsByVisibility(false, 10)
+      const textItems =
+        items.length > 0
+          ? `Libros ocultos\n\n${items.map((item, index) => `${index + 1}. ${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "—"}`).join("\n\n")}`
+          : "No hay libros ocultos."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textItems,
+        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:start") {
+      await clearPendingPdf(chatId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerPdfAwaitingFileText(),
+        replyMarkup: OWNER_PDF_AWAITING_FILE_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:cancel") {
+      await clearPendingPdf(chatId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Carga cancelada.\n\nNo hay ningun PDF pendiente.",
+        replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:pdfs:detail:")) {
+      const pdfId = callbackData.split(":")[3] || ""
+      const item = await getLibraryPdfById(pdfId)
+
+      if (!item) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar ese PDF.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: [
+          "Detalle de libro / PDF",
+          "",
+          `Titulo: ${item.title}`,
+          `Estado: ${item.is_published ? "Publicado" : "Oculto"}`,
+          `Autor: ${item.author || "—"}`,
+          `Descripcion: ${item.description || "—"}`,
+          `Fecha: ${formatTelegramDate(item.created_at)}`,
+          `URL publica: ${item.public_url || "—"}`,
+        ].join("\n"),
+        replyMarkup: buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs"),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:pdfs:hide:")) {
+      const pdfId = callbackData.split(":")[3] || ""
+      const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+      const ok = await setLibraryPdfPublished(pdfId, false, actor)
+      const item = await getLibraryPdfById(pdfId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: ok && item ? `Libro ocultado ✅\n\n${item.title}` : "No pude ocultar ese libro.",
+        replyMarkup: item ? buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:pdfs:restore:")) {
+      const pdfId = callbackData.split(":")[3] || ""
+      const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+      const ok = await setLibraryPdfPublished(pdfId, true, actor)
+      const item = await getLibraryPdfById(pdfId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: ok && item ? `Libro restaurado ✅\n\n${item.title}` : "No pude restaurar ese libro.",
+        replyMarkup: item ? buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:confirm") {
+      const pendingPdf = await supabaseService
+        .from("telegram_pending_pdf")
+        .select("file_id, mime_type, size_bytes, draft_title, draft_description, draft_author")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (
+        pendingPdf.error ||
+        !pendingPdf.data ||
+        !pendingPdf.data.file_id ||
+        !pendingPdf.data.draft_title
+      ) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay un PDF listo para publicar.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const publishResult = await publishPendingPdf({
+        chatId,
+        fromId,
+        fromUsername,
+        fileId: pendingPdf.data.file_id,
+        mimeType: pendingPdf.data.mime_type,
+        sizeBytes: pendingPdf.data.size_bytes,
+        title: pendingPdf.data.draft_title,
+        description: pendingPdf.data.draft_description || "",
+        author: pendingPdf.data.draft_author || "",
+      })
+
+      if (!publishResult.ok) {
+        const errorText =
+          publishResult.reason === "file_path"
+            ? "No pude obtener el archivo desde Telegram."
+            : publishResult.reason === "download"
+              ? "No pude descargar el PDF desde Telegram."
+              : publishResult.reason === "upload"
+                ? "No pude subir el PDF al bucket libros-pdf."
+                : "No pude guardar la metadata del PDF."
+
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: errorText,
+          replyMarkup: OWNER_PDF_CONFIRM_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `PDF publicado ✅\n\n${pendingPdf.data.draft_title}`,
+        replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:questions") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerQuestionsText(),
+        replyMarkup: OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:questions:pending") {
+      const questions = await listPendingAudienceQuestions(10)
+      const textQuestions =
+        questions.length > 0 ? buildQuestionListText("Preguntas pendientes", questions) : "No hay preguntas pendientes."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textQuestions,
+        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "pending") : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:questions:selected") {
+      const questions = await listSelectedAudienceQuestionsForOwner(10)
+      const textQuestions =
+        questions.length > 0 ? buildQuestionListText("Preguntas seleccionadas", questions) : "No hay preguntas seleccionadas."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textQuestions,
+        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "selected") : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:questions:hidden") {
+      const questions = await listHiddenAudienceQuestions(10)
+      const textQuestions =
+        questions.length > 0 ? buildQuestionListText("Preguntas ocultas", questions) : "No hay preguntas ocultas."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textQuestions,
+        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "hidden") : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:detail:")) {
+      const parts = callbackData.split(":")
+      const questionId = parts[3] || ""
+      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const question = await getAudienceQuestionById(questionId)
+
+      if (!question) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar esa pregunta.",
+          replyMarkup: OWNER_QUESTIONS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const stateLabel = question.is_hidden ? "Oculta" : question.is_selected ? "Seleccionada" : "Pendiente"
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: [
+          "Detalle de pregunta",
+          "",
+          `Estado: ${stateLabel}`,
+          `Autor: ${question.author_name || "Anonimo"}`,
+          `Fecha: ${formatTelegramDate(question.published_at || null)}`,
+          `Comment ID: ${question.comment_id || "—"}`,
+          `Video ID: ${question.youtube_video_id || "—"}`,
+          `Likes: ${typeof question.like_count === "number" ? question.like_count : "—"}`,
+          "",
+          question.text_display || "Sin texto",
+        ].join("\n"),
+        replyMarkup: buildOwnerQuestionDetailKeyboard(question.id, listType, {
+          isSelected: Boolean(question.is_selected),
+          isHidden: Boolean(question.is_hidden),
+        }),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:select:")) {
+      const parts = callbackData.split(":")
+      const questionId = parts[3] || ""
+      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const selectedBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+      const ok = await selectAudienceQuestionById(questionId, selectedBy)
+      const question = await getAudienceQuestionById(questionId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text:
+          ok && question
+            ? [
+                "Pregunta seleccionada ✅",
+                "",
+                `Autor: ${question.author_name || "Anonimo"}`,
+                question.text_display || "Sin texto",
+              ].join("\n")
+            : "No pude seleccionar esa pregunta.",
+        replyMarkup: question
+          ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
+              isSelected: Boolean(question.is_selected),
+              isHidden: Boolean(question.is_hidden),
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:hide:")) {
+      const parts = callbackData.split(":")
+      const questionId = parts[3] || ""
+      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const ok = await hideAudienceQuestionById(questionId)
+      const question = await getAudienceQuestionById(questionId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text:
+          ok && question
+            ? [
+                "Pregunta ocultada ✅",
+                "",
+                `Autor: ${question.author_name || "Anonimo"}`,
+                question.text_display || "Sin texto",
+              ].join("\n")
+            : "No pude ocultar esa pregunta.",
+        replyMarkup: question
+          ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
+              isSelected: Boolean(question.is_selected),
+              isHidden: Boolean(question.is_hidden),
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:restore:")) {
+      const parts = callbackData.split(":")
+      const questionId = parts[3] || ""
+      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "hidden"
+      const ok = await restoreAudienceQuestionById(questionId)
+      const question = await getAudienceQuestionById(questionId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text:
+          ok && question
+            ? [
+                "Pregunta restaurada ✅",
+                "",
+                `Autor: ${question.author_name || "Anonimo"}`,
+                question.text_display || "Sin texto",
+              ].join("\n")
+            : "No pude restaurar esa pregunta.",
+        replyMarkup: question
+          ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
+              isSelected: Boolean(question.is_selected),
+              isHidden: Boolean(question.is_hidden),
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:audio:start") {
+      await clearPendingAudio(chatId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerAudioAwaitingFileText(),
+        replyMarkup: OWNER_AUDIO_AWAITING_FILE_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:audio:list") {
+      const audios = await listRespuestasAudio(5)
+      const textAudios =
+        audios.length > 0
+          ? `Respuestas publicadas\n\n${audios
+              .map((audio, index) => `${index + 1}. ${audio.title}\n${formatTelegramDate(audio.created_at)}`)
+              .join("\n\n")}`
+          : "No hay respuestas publicadas todavia."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textAudios,
+        replyMarkup: OWNER_AUDIO_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:audio:cancel") {
+      await clearPendingAudio(chatId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Carga cancelada.\n\nNo hay ningun audio pendiente.",
+        replyMarkup: OWNER_AUDIO_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:audio:confirm") {
+      const pendingAudio = await supabaseService
+        .from("telegram_pending_audio")
+        .select("chat_id, from_id, file_id, source_kind, mime_type, size_bytes, draft_title")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (pendingAudio.error || !pendingAudio.data || !pendingAudio.data.file_id || !pendingAudio.data.draft_title) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay una carga lista para publicar. Usa Publicar audio e inicia una nueva carga.",
+          replyMarkup: OWNER_AUDIO_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const publishResult = await publishPendingAudio({
+        chatId,
+        fromId,
+        fromUsername,
+        fileId: pendingAudio.data.file_id,
+        sourceKind: pendingAudio.data.source_kind,
+        mimeType: pendingAudio.data.mime_type,
+        sizeBytes: pendingAudio.data.size_bytes,
+        title: pendingAudio.data.draft_title,
+      })
+
+      if (!publishResult.ok) {
+        const errorText =
+          publishResult.reason === "file_path"
+            ? "No pude obtener el archivo desde Telegram."
+            : publishResult.reason === "download"
+              ? "No pude descargar el archivo desde Telegram."
+              : publishResult.reason === "upload"
+                ? "No pude subir el audio a Storage."
+                : "No pude guardar metadata del audio."
+
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: errorText,
+          replyMarkup: OWNER_AUDIO_CONFIRM_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Publicado ✅\n\n${pendingAudio.data.draft_title}`,
+        replyMarkup: OWNER_AUDIO_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:videos") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerVideosText(),
+        replyMarkup: OWNER_VIDEOS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:videos:categories") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Videos del canal\n\nElegi una categoria para ver videos reales.",
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: "Series Biblicas", callback_data: "owner:videos:list:series-biblicas:0" }],
+            [{ text: "Watchman Nee", callback_data: "owner:videos:list:watchman-nee:0" }],
+            [{ text: "Lives", callback_data: "owner:videos:list:lives:0" }],
+            [{ text: "Cortes", callback_data: "owner:videos:list:cortes:0" }],
+            [{ text: "Shorts", callback_data: "owner:videos:list:shorts:0" }],
+            [{ text: "Club del Libro", callback_data: "owner:videos:list:club-del-libro:0" }],
+            [{ text: "Reflexiones", callback_data: "owner:videos:list:reflexiones:0" }],
+            [{ text: "Ensenanzas", callback_data: "owner:videos:list:ensenanzas:0" }],
+            [
+              { text: "Volver", callback_data: "owner:videos" },
+              { text: "Menu principal", callback_data: "owner:main" },
+            ],
+          ],
+        },
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:videos:latest") {
+      const latestVideos = await listLatestVideoSummaries(10)
+      const textLatest = latestVideos.length > 0 ? buildVideoListText("Ultimos videos", latestVideos) : "No encontre videos recientes."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textLatest,
+        replyMarkup: latestVideos.length > 0 ? buildOwnerVideoListKeyboard(latestVideos, "owner:videos") : OWNER_VIDEOS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:videos:search") {
+      await saveVideoSearchPrompt(chatId, fromId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerVideosSearchText(),
+        replyMarkup: {
+          inline_keyboard: [
+            [{ text: "Volver", callback_data: "owner:videos" }],
+            [{ text: "Menu principal", callback_data: "owner:main" }],
+          ],
+        },
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:videos:unclassified") {
+      const videos = await listVideosWithoutSeriesCollection(10)
+      const textUnclassified =
+        videos.length > 0
+          ? buildVideoListText("Videos sin clasificar en series_collection", videos)
+          : "No encontre videos sin clasificar en series_collection."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textUnclassified,
+        replyMarkup: videos.length > 0 ? buildOwnerVideoListKeyboard(videos, "owner:videos") : OWNER_VIDEOS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:videos:list:")) {
+      const parts = callbackData.split(":")
+      const categorySlug = (parts[3] || "").trim().toLowerCase()
+      const offset = Number(parts[4] || "0")
+      const category = getTelegramEditorialCategory(categorySlug)
+
+      if (!category || !Number.isInteger(offset) || offset < 0) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Categoria invalida.",
+          replyMarkup: OWNER_VIDEOS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const videos = await listVideosByTelegramEditorialCategory(category.slug, offset, 10)
+      if (videos.length === 0) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: `No encontre videos para ${category.label}.`,
+          replyMarkup: OWNER_VIDEOS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildVideoListText(`Categoria: ${category.label}`, videos),
+        replyMarkup: buildOwnerVideoListKeyboard(videos, "owner:videos:categories"),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:videos:detail:")) {
+      const youtubeVideoId = callbackData.split(":")[3] || ""
+      const detail = await getVideoEditorialDetailByYoutubeId(youtubeVideoId)
+
+      if (!detail) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar ese video.",
+          replyMarkup: OWNER_VIDEOS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: [
+          "Detalle de video",
+          "",
+          detail.title,
+          formatTelegramDate(detail.published_at),
+          `ID: ${detail.youtube_video_id}`,
+          `Slug: ${detail.slug || "—"}`,
+        ].join("\n"),
+        replyMarkup: buildOwnerVideoDetailKeyboard(detail.youtube_video_id, "owner:videos"),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:videos:classification:")) {
+      const youtubeVideoId = callbackData.split(":")[3] || ""
+      const rows = await listVideoEditorialClassificationByYoutubeId(youtubeVideoId)
+
+      if (rows.length === 0) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No encontre clasificacion editorial para ese video.",
+          replyMarkup: buildOwnerVideoClassificationKeyboard(youtubeVideoId, "owner:videos"),
+        })
+        return new Response("ok")
+      }
+
+      const textClassification = [
+        "Clasificacion editorial",
+        "",
+        ...rows.map((row) =>
+          [
+            `${row.dimension_code}: ${row.term_label}`,
+            `slug: ${row.term_slug}`,
+            `source: ${row.source_kind}`,
+            `confidence: ${row.confidence.toFixed(4)}`,
+          ].join("\n")
+        ),
+      ].join("\n\n")
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textClassification,
+        replyMarkup: buildOwnerVideoClassificationKeyboard(youtubeVideoId, "owner:videos"),
       })
       return new Response("ok")
     }
@@ -351,13 +1499,50 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    if (callbackData.startsWith("owner:placeholder:")) {
-      const key = callbackData.split(":")[2] || ""
+    if (callbackData === "owner:status") {
+      const [videosCountRes, pendingQuestionsRes, audiosCountRes, latestSyncRes, currentRecommendation] = await Promise.all([
+        supabaseService.from("videos").select("*", { count: "exact", head: true }),
+        supabaseService
+          .from("video_questions")
+          .select("*", { count: "exact", head: true })
+          .eq("is_selected", false)
+          .eq("is_hidden", false),
+        supabaseService.from("respuestas_audio").select("*", { count: "exact", head: true }),
+        supabaseService
+          .from("sync_runs")
+          .select("source,status,started_at")
+          .order("started_at", { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle(),
+        getVideoRecommendation(),
+      ])
+
+      const statusText = buildOwnerStatusText({
+        videosCount: videosCountRes.count ?? 0,
+        pendingQuestionsCount: pendingQuestionsRes.count ?? 0,
+        audiosCount: audiosCountRes.count ?? 0,
+        latestSyncSource: latestSyncRes.data?.source ?? null,
+        latestSyncStatus: latestSyncRes.data?.status ?? null,
+        latestSyncStartedAt: latestSyncRes.data?.started_at ?? null,
+        recommendedTitle: currentRecommendation?.title ?? null,
+        recommendedYoutubeId: currentRecommendation?.youtube_video_id ?? null,
+      })
+
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: buildOwnerPlaceholderText(key),
-        replyMarkup: buildOwnerPlaceholderKeyboard(),
+        text: statusText,
+        replyMarkup: OWNER_STATUS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:help") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerHelpText(),
+        replyMarkup: OWNER_HELP_MENU_BUTTONS,
       })
       return new Response("ok")
     }
@@ -391,14 +1576,28 @@ export async function POST(req: Request) {
       text.startsWith("/recomendado-web") ||
       text.startsWith("/menu")
     if (!supportedCommand) {
-      const pendingForTitle = await supabaseService
-        .from("telegram_pending_audio")
-        .select("chat_id")
-        .eq("chat_id", chatId)
-        .eq("from_id", fromId)
-        .maybeSingle()
+      const [pendingForTitle, hasVideoSearchPrompt, hasAudioSearchPromptActive, audioEditTitlePromptId, readingEditor] = await Promise.all([
+        supabaseService
+          .from("telegram_pending_audio")
+          .select("chat_id")
+          .eq("chat_id", chatId)
+          .eq("from_id", fromId)
+          .maybeSingle(),
+        hasActiveVideoSearchPrompt(chatId, fromId),
+        hasActiveAudioSearchPrompt(chatId, fromId),
+        getActiveAudioEditTitlePrompt(chatId, fromId),
+        getReadingEditorContext(chatId, fromId),
+      ])
 
-      if (!pendingForTitle.error && pendingForTitle.data) {
+      if (hasVideoSearchPrompt) {
+        // Hay prompt activo: dejar que el flujo de búsqueda procese este texto.
+      } else if (hasAudioSearchPromptActive) {
+        // Hay prompt activo: dejar que el flujo de búsqueda de respuestas procese este texto.
+      } else if (audioEditTitlePromptId) {
+        // Hay prompt activo: dejar que la edición de título procese este texto.
+      } else if (readingEditor?.field) {
+        // Hay prompt activo: dejar que la edición de lectura procese este texto.
+      } else if (!pendingForTitle.error && pendingForTitle.data) {
         // Hay pending activo: dejar que el flujo de publicación procese este texto como título.
       } else {
         await sendTelegramMessage(chatId, "Recibido ✅")
@@ -408,7 +1607,7 @@ export async function POST(req: Request) {
   }
 
   if (!isOwner(fromId)) {
-    if (text.startsWith("/recomendar") || text.startsWith("/audios") || text.startsWith("/recomendado-web") || voice || audio) {
+    if (text.startsWith("/recomendar") || text.startsWith("/audios") || text.startsWith("/recomendado-web") || voice || audio || document) {
       await sendTelegramMessage(chatId, "No autorizado")
     }
     return new Response("ok")
@@ -436,9 +1635,49 @@ export async function POST(req: Request) {
         source_kind: sourceKind,
         mime_type: mimeType,
         size_bytes: sizeBytes,
+        draft_title: null,
       }, { onConflict: "chat_id" })
 
-    await sendTelegramMessage(chatId, "Perfecto. Enviame el título del audio.")
+    await sendTelegramMessage(chatId, buildOwnerAudioAwaitingTitleText(), OWNER_AUDIO_AWAITING_FILE_BUTTONS)
+    return new Response("ok")
+  }
+
+  if (document) {
+    const fileId = (document.file_id || "").trim()
+    const fileUniqueId = (document.file_unique_id || "").trim() || null
+    const mimeType = (document.mime_type || "").trim() || null
+    const sizeBytes = typeof document.file_size === "number" ? Number(document.file_size) : null
+
+    if (!fileId || mimeType !== "application/pdf") {
+      await sendTelegramMessage(chatId, "Solo puedo recibir archivos PDF válidos.", OWNER_PDF_AWAITING_FILE_BUTTONS)
+      return new Response("ok")
+    }
+
+    await supabaseService
+      .from("telegram_pending_pdf")
+      .upsert({
+        chat_id: chatId,
+        from_id: fromId,
+        file_id: fileId,
+        file_unique_id: fileUniqueId,
+        mime_type: mimeType,
+        size_bytes: sizeBytes,
+        draft_title: null,
+        draft_description: null,
+        draft_author: null,
+        awaiting_field: "title",
+      }, { onConflict: "chat_id" })
+
+    await sendTelegramMessage(
+      chatId,
+      buildOwnerPdfAwaitingFieldText({
+        title: "",
+        description: "",
+        author: "",
+        awaitingField: "title",
+      }),
+      OWNER_PDF_AWAITING_FILE_BUTTONS
+    )
     return new Response("ok")
   }
 
@@ -469,7 +1708,16 @@ export async function POST(req: Request) {
   }
 
   if (text.startsWith("/listar-categorias")) {
-    const lines = TELEGRAM_EDITORIAL_CATEGORIES.map((item, index) => `${index + 1}. ${item.label}`)
+    const lines = [
+      "1. series-biblicas",
+      "2. watchman-nee",
+      "3. lives",
+      "4. cortes",
+      "5. shorts",
+      "6. club-del-libro",
+      "7. reflexiones",
+      "8. ensenanzas",
+    ]
     await sendTelegramMessage(chatId, `Categorías disponibles:\n${lines.join("\n")}`)
     return new Response("ok")
   }
@@ -573,7 +1821,7 @@ export async function POST(req: Request) {
 
   const pending = await supabaseService
     .from("telegram_pending_audio")
-    .select("chat_id, from_id, file_id, file_unique_id, source_kind, mime_type, size_bytes")
+    .select("chat_id, from_id, file_id, file_unique_id, source_kind, mime_type, size_bytes, draft_title")
     .eq("chat_id", chatId)
     .eq("from_id", fromId)
     .maybeSingle()
@@ -585,59 +1833,177 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    const filePath = await getTelegramFilePath(pending.data.file_id)
-    if (!filePath) {
-      await sendTelegramMessage(chatId, "No pude obtener el archivo desde Telegram.")
+    const titleUpdate = await supabaseService
+      .from("telegram_pending_audio")
+      .update({ draft_title: title })
+      .eq("chat_id", chatId)
+      .eq("from_id", fromId)
+
+    if (titleUpdate.error) {
+      await sendTelegramMessage(chatId, "No pude guardar el título del audio.")
       return new Response("ok")
     }
 
-    const bytes = await downloadTelegramFile(filePath)
-    if (!bytes) {
-      await sendTelegramMessage(chatId, "No pude descargar el archivo desde Telegram.")
-      return new Response("ok")
-    }
-
-    const now = new Date()
-    const yyyy = String(now.getUTCFullYear())
-    const mm = String(now.getUTCMonth() + 1).padStart(2, "0")
-    const ext = extensionFromMime(pending.data.mime_type, pending.data.source_kind)
-    const uuid = crypto.randomUUID()
-    const bucket = "respuestas-audio"
-    const storagePath = `${yyyy}/${mm}/${uuid}.${ext}`
-    const contentType = pending.data.mime_type || (pending.data.source_kind === "voice" ? "audio/ogg" : "application/octet-stream")
-
-    const upload = await supabaseService.storage
-      .from(bucket)
-      .upload(storagePath, bytes, { contentType, upsert: false })
-
-    if (upload.error) {
-      await sendTelegramMessage(chatId, "No pude subir el audio a Storage.")
-      return new Response("ok")
-    }
-
-    const publicUrlData = supabaseService.storage.from(bucket).getPublicUrl(storagePath)
-    const publicUrl = publicUrlData?.data?.publicUrl ?? null
-    const createdBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
-
-    const insertRes = await supabaseService
-      .from("respuestas_audio")
-      .insert({
+    await sendTelegramMessage(
+      chatId,
+      buildOwnerAudioConfirmText({
         title,
-        storage_bucket: bucket,
-        storage_path: storagePath,
-        public_url: publicUrl,
-        mime_type: pending.data.mime_type,
-        size_bytes: pending.data.size_bytes,
-        created_by: createdBy,
-      })
+        sourceKind: pending.data.source_kind,
+        mimeType: pending.data.mime_type,
+      }),
+      OWNER_AUDIO_CONFIRM_BUTTONS
+    )
+    return new Response("ok")
+  }
 
-    if (insertRes.error) {
-      await sendTelegramMessage(chatId, "No pude guardar metadata del audio.")
+  const pendingPdf = await supabaseService
+    .from("telegram_pending_pdf")
+    .select("draft_title, draft_description, draft_author, awaiting_field, mime_type")
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .maybeSingle()
+
+  if (!pendingPdf.error && pendingPdf.data && pendingPdf.data.awaiting_field) {
+    const input = text.trim()
+    const normalized = input === "-" ? "" : input
+
+    if (pendingPdf.data.awaiting_field === "title") {
+      if (!normalized) {
+        await sendTelegramMessage(chatId, "Enviame un titulo valido para el PDF.", OWNER_PDF_AWAITING_FILE_BUTTONS)
+        return new Response("ok")
+      }
+
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_title: normalized, awaiting_field: "description" })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      await sendTelegramMessage(
+        chatId,
+        buildOwnerPdfAwaitingFieldText({
+          title: normalized,
+          description: pendingPdf.data.draft_description || "",
+          author: pendingPdf.data.draft_author || "",
+          awaitingField: "description",
+        }),
+        OWNER_PDF_AWAITING_FILE_BUTTONS
+      )
       return new Response("ok")
     }
 
-    await supabaseService.from("telegram_pending_audio").delete().eq("chat_id", chatId)
-    await sendTelegramMessage(chatId, "Publicado ✅")
+    if (pendingPdf.data.awaiting_field === "description") {
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_description: normalized || null, awaiting_field: "author" })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      await sendTelegramMessage(
+        chatId,
+        buildOwnerPdfAwaitingFieldText({
+          title: pendingPdf.data.draft_title || "",
+          description: normalized,
+          author: pendingPdf.data.draft_author || "",
+          awaitingField: "author",
+        }),
+        OWNER_PDF_AWAITING_FILE_BUTTONS
+      )
+      return new Response("ok")
+    }
+
+    await supabaseService
+      .from("telegram_pending_pdf")
+      .update({ draft_author: normalized || null, awaiting_field: null })
+      .eq("chat_id", chatId)
+      .eq("from_id", fromId)
+
+    await sendTelegramMessage(
+      chatId,
+      buildOwnerPdfConfirmText({
+        title: pendingPdf.data.draft_title || "",
+        description: pendingPdf.data.draft_description || "",
+        author: normalized,
+        mimeType: pendingPdf.data.mime_type,
+      }),
+      OWNER_PDF_CONFIRM_BUTTONS
+    )
+    return new Response("ok")
+  }
+
+  const readingEditor = await getReadingEditorContext(chatId, fromId)
+  if (readingEditor?.field) {
+    const nextDraft = {
+      ...readingEditor.draft,
+      [readingEditor.field]: text.trim(),
+    }
+
+    await saveReadingEditorContext(chatId, fromId, {
+      mode: readingEditor.mode,
+      field: null,
+      draft: nextDraft,
+    })
+
+    await sendTelegramMessage(
+      chatId,
+      buildOwnerReadingEditorText({
+        mode: readingEditor.mode,
+        title: nextDraft.title,
+        content_md: nextDraft.content_md,
+        reference_text: nextDraft.reference_text,
+        author: nextDraft.author,
+        awaitingField: null,
+      }),
+      buildOwnerReadingEditorKeyboard()
+    )
+    return new Response("ok")
+  }
+
+  const audioEditId = await getActiveAudioEditTitlePrompt(chatId, fromId)
+  if (audioEditId) {
+    const ok = await updateRespuestaAudioTitle(audioEditId, text)
+    await clearAudioEditTitlePrompt(chatId, fromId)
+    const answer = await getRespuestaAudioById(audioEditId)
+
+    await sendTelegramMessage(
+      chatId,
+      ok && answer ? `Titulo actualizado ✅\n\n${answer.title}` : "No pude actualizar el titulo.",
+      answer ? buildOwnerAnswerDetailKeyboard(answer.id, "owner:answers") : OWNER_ANSWERS_MENU_BUTTONS
+    )
+    return new Response("ok")
+  }
+
+  if (await hasActiveAudioSearchPrompt(chatId, fromId)) {
+    await clearAudioSearchPrompt(chatId, fromId)
+    const answers = await searchRespuestasAudioByTitle(text, 10)
+
+    if (answers.length === 0) {
+      await sendTelegramMessage(chatId, "No encontre respuestas con ese titulo.", OWNER_ANSWERS_MENU_BUTTONS)
+      return new Response("ok")
+    }
+
+    await sendTelegramMessage(
+      chatId,
+      buildAnswerListText(`Busqueda: ${text}`, answers),
+      buildOwnerAnswerListKeyboard(answers, "owner:answers")
+    )
+    return new Response("ok")
+  }
+
+  if (await hasActiveVideoSearchPrompt(chatId, fromId)) {
+    await clearVideoSearchPrompt(chatId, fromId)
+    const videos = await searchVideoSummariesByTitle(text, 10)
+
+    if (videos.length === 0) {
+      await sendTelegramMessage(chatId, "No encontre videos con ese titulo.", OWNER_VIDEOS_MENU_BUTTONS)
+      return new Response("ok")
+    }
+
+    await sendTelegramMessage(
+      chatId,
+      buildVideoListText(`Busqueda: ${text}`, videos),
+      buildOwnerVideoListKeyboard(videos, "owner:videos")
+    )
     return new Response("ok")
   }
 

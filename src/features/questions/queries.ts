@@ -9,6 +9,9 @@ export type AudienceQuestion = {
   like_count?: number | null
   published_at?: string | null
   selected_at?: string | null
+  is_selected?: boolean
+  is_hidden?: boolean
+  selected_by?: string | null
 }
 
 export async function listSelectedAudienceQuestions(limit = 6): Promise<AudienceQuestion[]> {
@@ -39,6 +42,121 @@ export async function listSelectedAudienceQuestions(limit = 6): Promise<Audience
   } catch {
     return []
   }
+}
+
+function mapAudienceQuestion(row: any): AudienceQuestion {
+  return {
+    id: typeof row?.id === "string" ? row.id : "",
+    youtube_video_id: typeof row?.youtube_video_id === "string" ? row.youtube_video_id : null,
+    comment_id: typeof row?.comment_id === "string" ? row.comment_id : null,
+    author_name: typeof row?.author_name === "string" ? row.author_name : null,
+    text_display: typeof row?.text_display === "string" ? row.text_display : null,
+    like_count: typeof row?.like_count === "number" ? row.like_count : null,
+    published_at: typeof row?.published_at === "string" ? row.published_at : null,
+    selected_at: typeof row?.selected_at === "string" ? row.selected_at : null,
+    is_selected: typeof row?.is_selected === "boolean" ? row.is_selected : false,
+    is_hidden: typeof row?.is_hidden === "boolean" ? row.is_hidden : false,
+    selected_by: typeof row?.selected_by === "string" ? row.selected_by : null,
+  }
+}
+
+export async function listPendingAudienceQuestions(limit = 10): Promise<AudienceQuestion[]> {
+  try {
+    const res = await supabaseService
+      .from("video_questions")
+      .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
+      .eq("is_selected", false)
+      .eq("is_hidden", false)
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(limit)
+
+    if (res.error || !Array.isArray(res.data)) return []
+    return res.data.map(mapAudienceQuestion).filter((row) => row.id)
+  } catch {
+    return []
+  }
+}
+
+export async function listSelectedAudienceQuestionsForOwner(limit = 10): Promise<AudienceQuestion[]> {
+  try {
+    const res = await supabaseService
+      .from("video_questions")
+      .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
+      .eq("is_selected", true)
+      .eq("is_hidden", false)
+      .order("selected_at", { ascending: false, nullsFirst: false })
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .limit(limit)
+
+    if (res.error || !Array.isArray(res.data)) return []
+    return res.data.map(mapAudienceQuestion).filter((row) => row.id)
+  } catch {
+    return []
+  }
+}
+
+export async function listHiddenAudienceQuestions(limit = 10): Promise<AudienceQuestion[]> {
+  try {
+    const res = await supabaseService
+      .from("video_questions")
+      .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
+      .eq("is_hidden", true)
+      .order("updated_at", { ascending: false, nullsFirst: false })
+      .limit(limit)
+
+    if (res.error || !Array.isArray(res.data)) return []
+    return res.data.map(mapAudienceQuestion).filter((row) => row.id)
+  } catch {
+    return []
+  }
+}
+
+export async function getAudienceQuestionById(id: string): Promise<AudienceQuestion | null> {
+  try {
+    const res = await supabaseService
+      .from("video_questions")
+      .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (res.error || !res.data) return null
+    const row = mapAudienceQuestion(res.data)
+    return row.id ? row : null
+  } catch {
+    return null
+  }
+}
+
+export async function selectAudienceQuestionById(id: string, selectedBy: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({
+      is_selected: true,
+      is_hidden: false,
+      selected_at: new Date().toISOString(),
+      selected_by: selectedBy,
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function hideAudienceQuestionById(id: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({ is_hidden: true })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function restoreAudienceQuestionById(id: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({ is_hidden: false })
+    .eq("id", id)
+
+  return !res.error
 }
 
 export async function mapVideoSlugsByYoutubeId(
