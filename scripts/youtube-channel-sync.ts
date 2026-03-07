@@ -1,15 +1,23 @@
-
 import { fetchUploadsPlaylistIdForChannel, fetchPlaylistItems } from '../src/lib/youtube/client';
 import { supabaseService } from '../src/lib/supabase/client-service';
 import { loadServerEnv } from '../src/lib/env/server';
 
+function requireEnv(value: string | undefined, name: string): string {
+  if (!value) {
+    throw new Error(`Missing ${name}`);
+  }
+
+  return value;
+}
+
 async function main() {
   const { YOUTUBE_API_KEY } = loadServerEnv();
+  const apiKey = requireEnv(YOUTUBE_API_KEY, 'YOUTUBE_API_KEY');
   const CHANNEL_ID = 'UCSConnZVxPbFDPxZm22He_g';
 
   // 1. Get uploads playlist ID
   console.log('Fetching uploads playlist ID...');
-  const uploadsPlaylistId = await fetchUploadsPlaylistIdForChannel(YOUTUBE_API_KEY, CHANNEL_ID);
+  const uploadsPlaylistId = await fetchUploadsPlaylistIdForChannel(apiKey, CHANNEL_ID);
   console.log(`Uploads playlist ID: ${uploadsPlaylistId}`);
 
   // 2. List all videos from the playlist
@@ -20,7 +28,7 @@ async function main() {
 
   do {
     const response = await fetchPlaylistItems({
-      apiKey: YOUTUBE_API_KEY,
+      apiKey,
       playlistId: uploadsPlaylistId,
       pageToken: pageToken,
       maxResults: 50
