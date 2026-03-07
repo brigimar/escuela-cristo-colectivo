@@ -33,13 +33,13 @@ export function HomeHeader() {
           >
             <span className="relative inline-flex h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-[#fffaf0] ring-1 ring-[#cfbb93] sm:h-11 sm:w-11 lg:h-12 lg:w-12">
               <Image
-                src="/logo.png"
-                alt="Escuela de Cristo"
-                fill
-                priority
-                sizes="(max-width: 640px) 40px, (max-width: 1024px) 44px, 48px"
-                className="object-contain p-1"
-              />
+  src="/logo.png"
+  alt="Escuela de Cristo"
+  fill
+  priority
+  sizes="(max-width: 640px) 40px, (max-width: 1024px) 44px, 48px"
+  className="object-contain p-0"
+/>
             </span>
           </Link>
 
