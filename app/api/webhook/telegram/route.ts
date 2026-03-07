@@ -1,16 +1,30 @@
 import { revalidatePath } from "next/cache"
 import { loadServerEnv } from "@/lib/env/server"
-import { setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
+import { getVideoRecommendation, setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
 import {
   getActiveTelegramEditorialListContext,
   getTelegramEditorialCategory,
+  getVideoSummaryByYoutubeId,
   listVideosByTelegramEditorialCategory,
   saveTelegramEditorialListContext,
   TELEGRAM_EDITORIAL_CATEGORIES,
 } from "@/features/videos/editorial-queries"
 import { supabaseService } from "@/lib/supabase/client-service"
+import {
+  buildOwnerMainMenuText,
+  buildOwnerPlaceholderKeyboard,
+  buildOwnerPlaceholderText,
+  buildOwnerRecommendCategoriesKeyboard,
+  buildOwnerRecommendConfirmKeyboard,
+  buildOwnerRecommendCurrentKeyboard,
+  buildOwnerRecommendMenuText,
+  buildOwnerRecommendVideoListKeyboard,
+  OWNER_MAIN_MENU_BUTTONS,
+  OWNER_RECOMMEND_MENU_BUTTONS,
+} from "@/lib/telegram/owner-menu"
 
 type TelegramMessage = {
+  message_id?: number
   chat?: { id?: number }
   from?: { id?: number; username?: string }
   text?: string
@@ -18,26 +32,73 @@ type TelegramMessage = {
   audio?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number }
 }
 
-type TelegramUpdate = {
+type TelegramCallbackQuery = {
+  id?: string
+  data?: string
+  from?: { id?: number; username?: string }
   message?: TelegramMessage
 }
 
-async function sendTelegramMessage(chatId: number, text: string) {
+type TelegramUpdate = {
+  message?: TelegramMessage
+  callback_query?: TelegramCallbackQuery
+}
+
+type TelegramInlineKeyboardMarkup = {
+  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>
+}
+
+async function callTelegram(method: string, payload: Record<string, unknown>) {
   const { TELEGRAM_BOT_TOKEN } = loadServerEnv()
   if (!TELEGRAM_BOT_TOKEN) {
     throw new Error("Missing TELEGRAM_BOT_TOKEN")
   }
 
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify(payload),
   })
 
   if (!res.ok) {
     const body = await res.text().catch(() => "")
-    throw new Error(`Telegram sendMessage failed: ${res.status} ${body}`)
+    throw new Error(`Telegram ${method} failed: ${res.status} ${body}`)
   }
+}
+
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: TelegramInlineKeyboardMarkup) {
+  await callTelegram("sendMessage", {
+    chat_id: chatId,
+    text,
+    reply_markup: replyMarkup,
+  })
+}
+
+async function editTelegramMessage(chatId: number, messageId: number, text: string, replyMarkup?: TelegramInlineKeyboardMarkup) {
+  await callTelegram("editMessageText", {
+    chat_id: chatId,
+    message_id: messageId,
+    text,
+    reply_markup: replyMarkup,
+  })
+}
+
+async function answerTelegramCallbackQuery(callbackQueryId: string, text?: string) {
+  await callTelegram("answerCallbackQuery", {
+    callback_query_id: callbackQueryId,
+    text,
+  })
+}
+
+async function sendOrEditTelegramMessage(
+  params: { chatId: number; text: string; replyMarkup?: TelegramInlineKeyboardMarkup; messageId?: number | null }
+) {
+  if (typeof params.messageId === "number") {
+    await editTelegramMessage(params.chatId, params.messageId, params.text, params.replyMarkup)
+    return
+  }
+
+  await sendTelegramMessage(params.chatId, params.text, params.replyMarkup)
 }
 
 function formatTelegramDate(value: string | null) {
@@ -109,14 +170,206 @@ export async function POST(req: Request) {
   }
 
   const msg = update?.message
+  const callback = update?.callback_query
+  const callbackMessage = callback?.message
   const text = typeof msg?.text === "string" ? msg.text.trim() : ""
-  const chatId = typeof msg?.chat?.id === "number" ? msg.chat.id : null
-  const fromId = typeof msg?.from?.id === "number" ? msg.from.id : null
-  const fromUsername = typeof msg?.from?.username === "string" ? msg.from.username : null
+  const chatId =
+    typeof msg?.chat?.id === "number"
+      ? msg.chat.id
+      : typeof callbackMessage?.chat?.id === "number"
+        ? callbackMessage.chat.id
+        : null
+  const fromId =
+    typeof msg?.from?.id === "number"
+      ? msg.from.id
+      : typeof callback?.from?.id === "number"
+        ? callback.from.id
+        : null
+  const fromUsername =
+    typeof msg?.from?.username === "string"
+      ? msg.from.username
+      : typeof callback?.from?.username === "string"
+        ? callback.from.username
+        : null
+  const callbackData = typeof callback?.data === "string" ? callback.data : ""
+  const callbackId = typeof callback?.id === "string" ? callback.id : null
+  const callbackMessageId = typeof callbackMessage?.message_id === "number" ? callbackMessage.message_id : null
   const voice = msg?.voice
   const audio = msg?.audio
 
   if (!chatId || !fromId) return new Response("ok")
+
+  if (callbackData) {
+    if (!isOwner(fromId)) {
+      if (callbackId) await answerTelegramCallbackQuery(callbackId, "No autorizado")
+      return new Response("ok")
+    }
+
+    if (callbackId) await answerTelegramCallbackQuery(callbackId)
+
+    if (callbackData === "owner:main") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerMainMenuText(),
+        replyMarkup: OWNER_MAIN_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:recommend") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerRecommendMenuText(),
+        replyMarkup: OWNER_RECOMMEND_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:recommend:categories") {
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Recomendar video web\n\nElegi una categoria.",
+        replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:recommend:current") {
+      const current = await getVideoRecommendation()
+      const textCurrent = current
+        ? `Recomendado actual\n\n${current.title || "Sin titulo"}\n${current.published_at ? formatTelegramDate(current.published_at) : "—"}\nID: ${current.youtube_video_id || "—"}`
+        : "No hay un recomendado actual publicado."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textCurrent,
+        replyMarkup: buildOwnerRecommendCurrentKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:recommend:list:")) {
+      const parts = callbackData.split(":")
+      const categorySlug = (parts[3] || "").trim().toLowerCase()
+      const offset = Number(parts[4] || "0")
+      const category = getTelegramEditorialCategory(categorySlug)
+
+      if (!category || !Number.isInteger(offset) || offset < 0) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Categoria invalida.",
+          replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      const videos = await listVideosByTelegramEditorialCategory(category.slug, offset, 10)
+      if (videos.length === 0) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: `No encontre videos para ${category.label}.`,
+          replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      await saveTelegramEditorialListContext(chatId, fromId, category.slug, offset, videos)
+
+      const lines = videos.map((video, index) => `${offset + index + 1}. ${video.title}\n${formatTelegramDate(video.published_at)}`)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Categoria: ${category.label}\n\n${lines.join("\n\n")}`,
+        replyMarkup: buildOwnerRecommendVideoListKeyboard(category.slug, videos, offset, videos.length === 10),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:recommend:pick:")) {
+      const youtubeVideoId = callbackData.split(":")[3] || ""
+      const video = await getVideoSummaryByYoutubeId(youtubeVideoId)
+
+      if (!video) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar ese video.",
+          replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Confirmar publicacion\n\n${video.title}\n${formatTelegramDate(video.published_at)}\nID: ${video.youtube_video_id}`,
+        replyMarkup: buildOwnerRecommendConfirmKeyboard(video.youtube_video_id),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:recommend:confirm:")) {
+      const youtubeVideoId = callbackData.split(":")[3] || ""
+      const video = await getVideoSummaryByYoutubeId(youtubeVideoId)
+
+      if (!video) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No encontre ese video en la base. Primero debe estar sincronizado.",
+          replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      const setBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+      const result = await setVideoRecommendationByYoutubeId(youtubeVideoId, setBy)
+
+      if (!result.ok && result.reason === "not_found_in_videos") {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No encontre ese video en la base. Primero debe estar sincronizado.",
+          replyMarkup: buildOwnerRecommendCategoriesKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      revalidatePath("/")
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Recomendado web actualizado\n\n${video.title}\n${formatTelegramDate(video.published_at)}\nID: ${video.youtube_video_id}`,
+        replyMarkup: buildOwnerRecommendCurrentKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:placeholder:")) {
+      const key = callbackData.split(":")[2] || ""
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerPlaceholderText(key),
+        replyMarkup: buildOwnerPlaceholderKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    await sendOrEditTelegramMessage({
+      chatId,
+      messageId: callbackMessageId,
+      text: buildOwnerMainMenuText(),
+      replyMarkup: OWNER_MAIN_MENU_BUTTONS,
+    })
+    return new Response("ok")
+  }
 
   if (text) {
     if (text === "/start") {
@@ -135,7 +388,8 @@ export async function POST(req: Request) {
       text.startsWith("/audios") ||
       text.startsWith("/listar-categorias") ||
       text.startsWith("/listar-videos") ||
-      text.startsWith("/recomendado-web")
+      text.startsWith("/recomendado-web") ||
+      text.startsWith("/menu")
     if (!supportedCommand) {
       const pendingForTitle = await supabaseService
         .from("telegram_pending_audio")
@@ -206,6 +460,11 @@ export async function POST(req: Request) {
       return `- ${title} (${date})`
     })
     await sendTelegramMessage(chatId, `Últimos audios:\n${lines.join("\n")}`)
+    return new Response("ok")
+  }
+
+  if (text.startsWith("/menu")) {
+    await sendTelegramMessage(chatId, buildOwnerMainMenuText(), OWNER_MAIN_MENU_BUTTONS)
     return new Response("ok")
   }
 

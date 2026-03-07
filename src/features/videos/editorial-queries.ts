@@ -21,6 +21,12 @@ export type EditorialVideoListItem = {
   published_at: string | null
 }
 
+export type EditorialVideoSummary = {
+  youtube_video_id: string
+  title: string
+  published_at: string | null
+}
+
 type TelegramVideoListContextRow = {
   id?: string
   chat_id?: number
@@ -149,6 +155,23 @@ export async function listVideosByTelegramEditorialCategory(
       published_at: typeof row?.published_at === "string" ? row.published_at : null,
     }))
     .filter((row) => row.youtube_video_id.length > 0)
+}
+
+export async function getVideoSummaryByYoutubeId(youtubeVideoId: string): Promise<EditorialVideoSummary | null> {
+  const res = await supabaseService
+    .from("videos")
+    .select("youtube_video_id, title, published_at")
+    .eq("youtube_video_id", youtubeVideoId)
+    .maybeSingle()
+
+  if (res.error) throw new Error(res.error.message)
+  if (!res.data || typeof res.data.youtube_video_id !== "string") return null
+
+  return {
+    youtube_video_id: res.data.youtube_video_id,
+    title: typeof res.data.title === "string" ? res.data.title : "Sin título",
+    published_at: typeof res.data.published_at === "string" ? res.data.published_at : null,
+  }
 }
 
 export async function saveTelegramEditorialListContext(
