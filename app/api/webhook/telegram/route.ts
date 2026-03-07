@@ -1,5 +1,12 @@
 import { loadServerEnv } from "@/lib/env/server"
 import { setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
+import {
+  getActiveTelegramEditorialListContext,
+  getTelegramEditorialCategory,
+  listVideosByTelegramEditorialCategory,
+  saveTelegramEditorialListContext,
+  TELEGRAM_EDITORIAL_CATEGORIES,
+} from "@/features/videos/editorial-queries"
 import { supabaseService } from "@/lib/supabase/client-service"
 
 type TelegramMessage = {
@@ -30,6 +37,10 @@ async function sendTelegramMessage(chatId: number, text: string) {
     const body = await res.text().catch(() => "")
     throw new Error(`Telegram sendMessage failed: ${res.status} ${body}`)
   }
+}
+
+function formatTelegramDate(value: string | null) {
+  return value ? value.slice(0, 10) : "—"
 }
 
 function getOwnerId(): number {
@@ -118,7 +129,12 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    const supportedCommand = text.startsWith("/recomendar") || text.startsWith("/audios")
+    const supportedCommand =
+      text.startsWith("/recomendar") ||
+      text.startsWith("/audios") ||
+      text.startsWith("/listar-categorias") ||
+      text.startsWith("/listar-videos") ||
+      text.startsWith("/recomendado-web")
     if (!supportedCommand) {
       const pendingForTitle = await supabaseService
         .from("telegram_pending_audio")
@@ -137,7 +153,7 @@ export async function POST(req: Request) {
   }
 
   if (!isOwner(fromId)) {
-    if (text.startsWith("/recomendar") || text.startsWith("/audios") || voice || audio) {
+    if (text.startsWith("/recomendar") || text.startsWith("/audios") || text.startsWith("/recomendado-web") || voice || audio) {
       await sendTelegramMessage(chatId, "No autorizado")
     }
     return new Response("ok")
@@ -189,6 +205,87 @@ export async function POST(req: Request) {
       return `- ${title} (${date})`
     })
     await sendTelegramMessage(chatId, `Últimos audios:\n${lines.join("\n")}`)
+    return new Response("ok")
+  }
+
+  if (text.startsWith("/listar-categorias")) {
+    const lines = TELEGRAM_EDITORIAL_CATEGORIES.map((item, index) => `${index + 1}. ${item.label}`)
+    await sendTelegramMessage(chatId, `Categorías disponibles:\n${lines.join("\n")}`)
+    return new Response("ok")
+  }
+
+  if (text.startsWith("/listar-videos")) {
+    const parts = text.split(/\s+/).filter(Boolean)
+    const categorySlug = (parts[1] || "").trim().toLowerCase()
+    const rawOffset = (parts[2] || "").trim()
+    const offset = rawOffset ? Number(rawOffset) : 0
+    const category = getTelegramEditorialCategory(categorySlug)
+
+    if (!category) {
+      await sendTelegramMessage(chatId, "Uso: /listar-videos <categoria> [offset]")
+      return new Response("ok")
+    }
+
+    if (!Number.isInteger(offset) || offset < 0) {
+      await sendTelegramMessage(chatId, "El offset debe ser un entero mayor o igual a 0.")
+      return new Response("ok")
+    }
+
+    const videos = await listVideosByTelegramEditorialCategory(category.slug, offset, 10)
+    if (videos.length === 0) {
+      await sendTelegramMessage(chatId, `No encontré videos para ${category.label}.`)
+      return new Response("ok")
+    }
+
+    await saveTelegramEditorialListContext(chatId, fromId, category.slug, offset, videos)
+
+    const lines = videos.flatMap((video, index) => [
+      `${offset + index + 1}. ${video.title}`,
+      `${formatTelegramDate(video.published_at)}`,
+      `ID: ${video.youtube_video_id}`,
+      "",
+    ])
+
+    if (lines[lines.length - 1] === "") lines.pop()
+
+    await sendTelegramMessage(chatId, `Categoría: ${category.label}\n${lines.join("\n")}`)
+    return new Response("ok")
+  }
+
+  if (text.startsWith("/recomendado-web")) {
+    const parts = text.split(/\s+/).filter(Boolean)
+    const rawNumber = (parts[1] || "").trim()
+    const itemNumber = Number(rawNumber)
+
+    if (!Number.isInteger(itemNumber) || itemNumber <= 0) {
+      await sendTelegramMessage(chatId, "Número inválido. Elige uno de la última lista mostrada.")
+      return new Response("ok")
+    }
+
+    const context = await getActiveTelegramEditorialListContext(chatId, fromId)
+    if (!context || context.items.length === 0) {
+      await sendTelegramMessage(chatId, "No hay una lista reciente. Usa /listar-videos <categoria> primero.")
+      return new Response("ok")
+    }
+
+    const selected = context.items.find((item) => item.index === itemNumber)
+    if (!selected) {
+      await sendTelegramMessage(chatId, "Número inválido. Elige uno de la última lista mostrada.")
+      return new Response("ok")
+    }
+
+    const setBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+    const result = await setVideoRecommendationByYoutubeId(selected.youtube_video_id, setBy)
+
+    if (!result.ok && result.reason === "not_found_in_videos") {
+      await sendTelegramMessage(chatId, "No encontré ese video en la base. Primero debe estar sincronizado.")
+      return new Response("ok")
+    }
+
+    await sendTelegramMessage(
+      chatId,
+      `Recomendado web actualizado:\n${selected.index}. ${selected.title}\nID: ${selected.youtube_video_id}`
+    )
     return new Response("ok")
   }
 
