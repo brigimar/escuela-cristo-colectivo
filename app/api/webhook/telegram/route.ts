@@ -22,9 +22,13 @@ import {
 } from "@/features/reading/queries"
 import {
   createLibraryPdf,
+  clearPdfEditorContext,
+  getPdfEditorContext,
   getLibraryPdfById,
   listLibraryPdfsByVisibility,
+  savePdfEditorContext,
   setLibraryPdfPublished,
+  updateLibraryPdfMetadata,
 } from "@/features/library/queries"
 import {
   getAudienceQuestionById,
@@ -62,9 +66,9 @@ import {
   buildOwnerAnswerListKeyboard,
   buildOwnerAnswersSearchText,
   buildOwnerAnswersText,
-  buildOwnerPdfAwaitingFieldText,
+  buildOwnerPdfDraftEditorKeyboard,
+  buildOwnerPdfDraftEditorText,
   buildOwnerPdfAwaitingFileText,
-  buildOwnerPdfConfirmText,
   buildOwnerPdfDetailKeyboard,
   buildOwnerPdfListKeyboard,
   buildOwnerPdfsText,
@@ -92,7 +96,6 @@ import {
   OWNER_HELP_MENU_BUTTONS,
   OWNER_MAIN_MENU_BUTTONS,
   OWNER_PDF_AWAITING_FILE_BUTTONS,
-  OWNER_PDF_CONFIRM_BUTTONS,
   OWNER_PDFS_MENU_BUTTONS,
   OWNER_QUESTIONS_MENU_BUTTONS,
   OWNER_READING_MENU_BUTTONS,
@@ -212,6 +215,88 @@ function trimForTelegram(value: string | null | undefined, max = 800) {
   const text = (value || "").trim()
   if (!text) return "—"
   return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+function parsePdfBackCallback(value: string | null | undefined): "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs" {
+  if (value === "owner:pdfs:published" || value === "owner:pdfs:hidden" || value === "owner:pdfs") return value
+  return "owner:pdfs"
+}
+
+async function renderPdfDraftEditor(params: {
+  chatId: number
+  messageId?: number | null
+  fromId: number
+}) {
+  const pendingPdf = await supabaseService
+    .from("telegram_pending_pdf")
+    .select("file_id, draft_title, draft_description, draft_author, awaiting_field")
+    .eq("chat_id", params.chatId)
+    .eq("from_id", params.fromId)
+    .maybeSingle()
+
+  if (pendingPdf.error || !pendingPdf.data) {
+    await sendOrEditTelegramMessage({
+      chatId: params.chatId,
+      messageId: params.messageId,
+      text: "No hay borrador activo. Usa 'Subir nuevo PDF'.",
+      replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+    })
+    return
+  }
+
+  const awaitingField =
+    pendingPdf.data.awaiting_field === "title" ||
+    pendingPdf.data.awaiting_field === "description" ||
+    pendingPdf.data.awaiting_field === "author"
+      ? pendingPdf.data.awaiting_field
+      : null
+
+  await sendOrEditTelegramMessage({
+    chatId: params.chatId,
+    messageId: params.messageId,
+    text: buildOwnerPdfDraftEditorText({
+      hasFile: Boolean(pendingPdf.data.file_id),
+      title: pendingPdf.data.draft_title || "",
+      description: pendingPdf.data.draft_description || "",
+      author: pendingPdf.data.draft_author || "",
+      awaitingField,
+    }),
+    replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
+  })
+}
+
+async function renderPdfDetail(params: {
+  chatId: number
+  messageId?: number | null
+  pdfId: string
+  backCallback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
+}) {
+  const item = await getLibraryPdfById(params.pdfId)
+  if (!item) {
+    await sendOrEditTelegramMessage({
+      chatId: params.chatId,
+      messageId: params.messageId,
+      text: "No pude cargar ese PDF.",
+      replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+    })
+    return
+  }
+
+  await sendOrEditTelegramMessage({
+    chatId: params.chatId,
+    messageId: params.messageId,
+    text: [
+      "Detalle de libro / PDF",
+      "",
+      `Titulo: ${item.title}`,
+      `Autor: ${item.author || "—"}`,
+      `Descripcion: ${item.description || "—"}`,
+      `Estado: ${item.is_published ? "Publicado" : "Oculto"}`,
+      `Fecha: ${formatTelegramDate(item.created_at)}`,
+      `URL publica: ${item.public_url || "—"}`,
+    ].join("\n"),
+    replyMarkup: buildOwnerPdfDetailKeyboard(item.id, item.is_published, params.backCallback),
+  })
 }
 
 function getOwnerId(): number {
@@ -753,6 +838,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:pdfs") {
+      await clearPdfEditorContext(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -763,6 +849,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:pdfs:published") {
+      await clearPdfEditorContext(chatId, fromId)
       const items = await listLibraryPdfsByVisibility(true, 10)
       const textItems =
         items.length > 0
@@ -773,12 +860,13 @@ export async function POST(req: Request) {
         chatId,
         messageId: callbackMessageId,
         text: textItems,
-        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs:published") : OWNER_PDFS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
 
     if (callbackData === "owner:pdfs:hidden") {
+      await clearPdfEditorContext(chatId, fromId)
       const items = await listLibraryPdfsByVisibility(false, 10)
       const textItems =
         items.length > 0
@@ -789,13 +877,14 @@ export async function POST(req: Request) {
         chatId,
         messageId: callbackMessageId,
         text: textItems,
-        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
+        replyMarkup: items.length > 0 ? buildOwnerPdfListKeyboard(items, "owner:pdfs:hidden") : OWNER_PDFS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
 
     if (callbackData === "owner:pdfs:start") {
       await clearPendingPdf(chatId)
+      await clearPdfEditorContext(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -807,6 +896,7 @@ export async function POST(req: Request) {
 
     if (callbackData === "owner:pdfs:cancel") {
       await clearPendingPdf(chatId)
+      await clearPdfEditorContext(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -817,33 +907,55 @@ export async function POST(req: Request) {
     }
 
     if (callbackData.startsWith("owner:pdfs:detail:")) {
-      const pdfId = callbackData.split(":")[3] || ""
-      const item = await getLibraryPdfById(pdfId)
+      const parts = callbackData.split(":")
+      const pdfId = parts[3] || ""
+      const backCallback = parsePdfBackCallback(parts.slice(4).join(":"))
+      await clearPendingPdf(chatId)
+      await clearPdfEditorContext(chatId, fromId)
+      await renderPdfDetail({
+        chatId,
+        messageId: callbackMessageId,
+        pdfId,
+        backCallback,
+      })
+      return new Response("ok")
+    }
 
-      if (!item) {
+    if (callbackData.startsWith("owner:pdfs:edit:")) {
+      const parts = callbackData.split(":")
+      const field = parts[3] === "title" || parts[3] === "description" || parts[3] === "author" ? parts[3] : null
+      const pdfId = parts[4] || ""
+      const backCallback = parsePdfBackCallback(parts.slice(5).join(":"))
+      if (!field || !pdfId) {
         await sendOrEditTelegramMessage({
           chatId,
           messageId: callbackMessageId,
-          text: "No pude cargar ese PDF.",
+          text: "No pude iniciar la edición de ese campo.",
           replyMarkup: OWNER_PDFS_MENU_BUTTONS,
         })
         return new Response("ok")
       }
 
+      await clearPendingPdf(chatId)
+      await savePdfEditorContext(chatId, fromId, {
+        pdf_id: pdfId,
+        back_callback: backCallback,
+        field,
+      })
+
+      const prompt =
+        field === "title"
+          ? "Editar libro\n\nEnvia ahora el nuevo titulo."
+          : field === "description"
+            ? "Editar libro\n\nEnvia ahora la nueva descripcion. Usa - para vaciar."
+            : "Editar libro\n\nEnvia ahora el nuevo autor. Usa - para vaciar."
+      const current = await getLibraryPdfById(pdfId)
+
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: [
-          "Detalle de libro / PDF",
-          "",
-          `Titulo: ${item.title}`,
-          `Estado: ${item.is_published ? "Publicado" : "Oculto"}`,
-          `Autor: ${item.author || "—"}`,
-          `Descripcion: ${item.description || "—"}`,
-          `Fecha: ${formatTelegramDate(item.created_at)}`,
-          `URL publica: ${item.public_url || "—"}`,
-        ].join("\n"),
-        replyMarkup: buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs"),
+        text: prompt,
+        replyMarkup: buildOwnerPdfDetailKeyboard(pdfId, current?.is_published ?? true, backCallback),
       })
       return new Response("ok")
     }
@@ -852,14 +964,17 @@ export async function POST(req: Request) {
       const pdfId = callbackData.split(":")[3] || ""
       const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
       const ok = await setLibraryPdfPublished(pdfId, false, actor)
-      const item = await getLibraryPdfById(pdfId)
-
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: ok && item ? `Libro ocultado ✅\n\n${item.title}` : "No pude ocultar ese libro.",
-        replyMarkup: item ? buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
-      })
+      await clearPdfEditorContext(chatId, fromId)
+      if (!ok) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude ocultar ese libro.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+      await renderPdfDetail({ chatId, messageId: callbackMessageId, pdfId, backCallback: "owner:pdfs:published" })
       return new Response("ok")
     }
 
@@ -867,14 +982,17 @@ export async function POST(req: Request) {
       const pdfId = callbackData.split(":")[3] || ""
       const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
       const ok = await setLibraryPdfPublished(pdfId, true, actor)
-      const item = await getLibraryPdfById(pdfId)
-
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: ok && item ? `Libro restaurado ✅\n\n${item.title}` : "No pude restaurar ese libro.",
-        replyMarkup: item ? buildOwnerPdfDetailKeyboard(item.id, item.is_published, "owner:pdfs") : OWNER_PDFS_MENU_BUTTONS,
-      })
+      await clearPdfEditorContext(chatId, fromId)
+      if (!ok) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude restaurar ese libro.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+      await renderPdfDetail({ chatId, messageId: callbackMessageId, pdfId, backCallback: "owner:pdfs:hidden" })
       return new Response("ok")
     }
 
@@ -888,15 +1006,33 @@ export async function POST(req: Request) {
 
       if (
         pendingPdf.error ||
-        !pendingPdf.data ||
-        !pendingPdf.data.file_id ||
-        !pendingPdf.data.draft_title
+        !pendingPdf.data
       ) {
         await sendOrEditTelegramMessage({
           chatId,
           messageId: callbackMessageId,
-          text: "No hay un PDF listo para publicar.",
+          text: "No hay un borrador activo. Usa 'Subir nuevo PDF'.",
           replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      if (!pendingPdf.data.file_id) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Falta el archivo PDF. Envia un PDF valido para continuar.",
+          replyMarkup: OWNER_PDF_AWAITING_FILE_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      if (!pendingPdf.data.draft_title || !pendingPdf.data.draft_title.trim()) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Falta el titulo. Edita el titulo antes de confirmar.",
+          replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
         })
         return new Response("ok")
       }
@@ -927,7 +1063,7 @@ export async function POST(req: Request) {
           chatId,
           messageId: callbackMessageId,
           text: errorText,
-          replyMarkup: OWNER_PDF_CONFIRM_BUTTONS,
+          replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
         })
         return new Response("ok")
       }
@@ -937,6 +1073,57 @@ export async function POST(req: Request) {
         messageId: callbackMessageId,
         text: `PDF publicado ✅\n\n${pendingPdf.data.draft_title}`,
         replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      const latestPublished = await listLibraryPdfsByVisibility(true, 1)
+      if (latestPublished[0]) {
+        await renderPdfDetail({
+          chatId,
+          pdfId: latestPublished[0].id,
+          backCallback: "owner:pdfs:published",
+        })
+      }
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:pdfs:draft:field:")) {
+      const field = callbackData.split(":")[4]
+      if (field !== "title" && field !== "description" && field !== "author") {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Campo inválido.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const pendingPdf = await supabaseService
+        .from("telegram_pending_pdf")
+        .select("chat_id")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (pendingPdf.error || !pendingPdf.data) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay borrador activo. Usa 'Subir nuevo PDF'.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ awaiting_field: field })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      await renderPdfDraftEditor({
+        chatId,
+        messageId: callbackMessageId,
+        fromId,
       })
       return new Response("ok")
     }
@@ -1574,6 +1761,8 @@ export async function POST(req: Request) {
       text.startsWith("/listar-categorias") ||
       text.startsWith("/listar-videos") ||
       text.startsWith("/recomendado-web") ||
+      text === "/recomendado" ||
+      text.startsWith("/recomendado@") ||
       text.startsWith("/menu")
     if (!supportedCommand) {
       const [pendingForTitle, hasVideoSearchPrompt, hasAudioSearchPromptActive, audioEditTitlePromptId, readingEditor] = await Promise.all([
@@ -1588,6 +1777,15 @@ export async function POST(req: Request) {
         getActiveAudioEditTitlePrompt(chatId, fromId),
         getReadingEditorContext(chatId, fromId),
       ])
+      const [pendingPdfPrompt, pdfEditor] = await Promise.all([
+        supabaseService
+          .from("telegram_pending_pdf")
+          .select("awaiting_field")
+          .eq("chat_id", chatId)
+          .eq("from_id", fromId)
+          .maybeSingle(),
+        getPdfEditorContext(chatId, fromId),
+      ])
 
       if (hasVideoSearchPrompt) {
         // Hay prompt activo: dejar que el flujo de búsqueda procese este texto.
@@ -1597,6 +1795,10 @@ export async function POST(req: Request) {
         // Hay prompt activo: dejar que la edición de título procese este texto.
       } else if (readingEditor?.field) {
         // Hay prompt activo: dejar que la edición de lectura procese este texto.
+      } else if (!pendingPdfPrompt.error && pendingPdfPrompt.data?.awaiting_field) {
+        // Hay prompt activo: dejar que la edición de borrador PDF procese este texto.
+      } else if (pdfEditor?.field) {
+        // Hay prompt activo: dejar que la edición de PDF publicado procese este texto.
       } else if (!pendingForTitle.error && pendingForTitle.data) {
         // Hay pending activo: dejar que el flujo de publicación procese este texto como título.
       } else {
@@ -1665,19 +1867,10 @@ export async function POST(req: Request) {
         draft_title: null,
         draft_description: null,
         draft_author: null,
-        awaiting_field: "title",
+        awaiting_field: null,
       }, { onConflict: "chat_id" })
-
-    await sendTelegramMessage(
-      chatId,
-      buildOwnerPdfAwaitingFieldText({
-        title: "",
-        description: "",
-        author: "",
-        awaitingField: "title",
-      }),
-      OWNER_PDF_AWAITING_FILE_BUTTONS
-    )
+    await clearPdfEditorContext(chatId, fromId)
+    await renderPdfDraftEditor({ chatId, fromId })
     return new Response("ok")
   }
 
@@ -1798,6 +1991,11 @@ export async function POST(req: Request) {
     return new Response("ok")
   }
 
+  if (text === "/recomendado" || text.startsWith("/recomendado@")) {
+    await sendTelegramMessage(chatId, "Recomendar video web\n\nElegi una categoria.", buildOwnerRecommendCategoriesKeyboard())
+    return new Response("ok")
+  }
+
   if (text.startsWith("/recomendar")) {
     const parts = text.split(/\s+/).filter(Boolean)
     const youtubeVideoId = parts[1]
@@ -1858,7 +2056,7 @@ export async function POST(req: Request) {
 
   const pendingPdf = await supabaseService
     .from("telegram_pending_pdf")
-    .select("draft_title, draft_description, draft_author, awaiting_field, mime_type")
+    .select("draft_title, draft_description, draft_author, awaiting_field")
     .eq("chat_id", chatId)
     .eq("from_id", fromId)
     .maybeSingle()
@@ -1869,46 +2067,26 @@ export async function POST(req: Request) {
 
     if (pendingPdf.data.awaiting_field === "title") {
       if (!normalized) {
-        await sendTelegramMessage(chatId, "Enviame un titulo valido para el PDF.", OWNER_PDF_AWAITING_FILE_BUTTONS)
+        await sendTelegramMessage(chatId, "Enviame un titulo valido para el PDF.", buildOwnerPdfDraftEditorKeyboard())
         return new Response("ok")
       }
 
       await supabaseService
         .from("telegram_pending_pdf")
-        .update({ draft_title: normalized, awaiting_field: "description" })
+        .update({ draft_title: normalized, awaiting_field: null })
         .eq("chat_id", chatId)
         .eq("from_id", fromId)
-
-      await sendTelegramMessage(
-        chatId,
-        buildOwnerPdfAwaitingFieldText({
-          title: normalized,
-          description: pendingPdf.data.draft_description || "",
-          author: pendingPdf.data.draft_author || "",
-          awaitingField: "description",
-        }),
-        OWNER_PDF_AWAITING_FILE_BUTTONS
-      )
+      await renderPdfDraftEditor({ chatId, fromId })
       return new Response("ok")
     }
 
     if (pendingPdf.data.awaiting_field === "description") {
       await supabaseService
         .from("telegram_pending_pdf")
-        .update({ draft_description: normalized || null, awaiting_field: "author" })
+        .update({ draft_description: normalized || null, awaiting_field: null })
         .eq("chat_id", chatId)
         .eq("from_id", fromId)
-
-      await sendTelegramMessage(
-        chatId,
-        buildOwnerPdfAwaitingFieldText({
-          title: pendingPdf.data.draft_title || "",
-          description: normalized,
-          author: pendingPdf.data.draft_author || "",
-          awaitingField: "author",
-        }),
-        OWNER_PDF_AWAITING_FILE_BUTTONS
-      )
+      await renderPdfDraftEditor({ chatId, fromId })
       return new Response("ok")
     }
 
@@ -1917,17 +2095,35 @@ export async function POST(req: Request) {
       .update({ draft_author: normalized || null, awaiting_field: null })
       .eq("chat_id", chatId)
       .eq("from_id", fromId)
+    await renderPdfDraftEditor({ chatId, fromId })
+    return new Response("ok")
+  }
 
-    await sendTelegramMessage(
+  const pdfEditor = await getPdfEditorContext(chatId, fromId)
+  if (pdfEditor?.field) {
+    const item = await getLibraryPdfById(pdfEditor.pdf_id)
+    if (!item) {
+      await clearPdfEditorContext(chatId, fromId)
+      await sendTelegramMessage(chatId, "No pude cargar ese libro.", OWNER_PDFS_MENU_BUTTONS)
+      return new Response("ok")
+    }
+
+    const normalized = text.trim() === "-" ? "" : text.trim()
+    const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+    const ok = await updateLibraryPdfMetadata(item.id, pdfEditor.field, normalized, actor)
+    if (!ok) {
+      const errorText = pdfEditor.field === "title" ? "El titulo no puede quedar vacío." : "No pude actualizar el campo."
+      await sendTelegramMessage(chatId, errorText, buildOwnerPdfDetailKeyboard(item.id, item.is_published, pdfEditor.back_callback))
+      return new Response("ok")
+    }
+
+    await savePdfEditorContext(chatId, fromId, { ...pdfEditor, field: null })
+    await sendTelegramMessage(chatId, "Campo actualizado ✅")
+    await renderPdfDetail({
       chatId,
-      buildOwnerPdfConfirmText({
-        title: pendingPdf.data.draft_title || "",
-        description: pendingPdf.data.draft_description || "",
-        author: normalized,
-        mimeType: pendingPdf.data.mime_type,
-      }),
-      OWNER_PDF_CONFIRM_BUTTONS
-    )
+      pdfId: item.id,
+      backCallback: pdfEditor.back_callback,
+    })
     return new Response("ok")
   }
 
