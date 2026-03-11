@@ -206,6 +206,7 @@ export function buildOwnerHelpText() {
     "",
     "Comandos disponibles:",
     "- /menu",
+    "- /recomendado",
     "- /recomendar <youtube_video_id>",
     "- /listar-videos <categoria> [offset]",
     "- /recomendado-web <numero>",
@@ -303,7 +304,7 @@ export const OWNER_PDFS_MENU_BUTTONS: InlineKeyboardMarkup = {
     [{ text: "Ver libros publicados", callback_data: "owner:pdfs:published" }],
     [{ text: "Ver libros ocultos", callback_data: "owner:pdfs:hidden" }],
     [{ text: "Subir nuevo PDF", callback_data: "owner:pdfs:start" }],
-    [{ text: "Menu principal", callback_data: "owner:main" }],
+    [{ text: "Volver", callback_data: "owner:main" }],
   ],
 }
 
@@ -369,22 +370,27 @@ export function buildOwnerPdfAwaitingFileText() {
   ].join("\n")
 }
 
-export function buildOwnerPdfAwaitingFieldText(params: {
+export function buildOwnerPdfDraftEditorText(params: {
   title: string
   description: string
   author: string
-  awaitingField: "title" | "description" | "author"
+  hasFile: boolean
+  awaitingField: "title" | "description" | "author" | null
 }) {
   const hint =
     params.awaitingField === "title"
       ? "Envia ahora el titulo."
       : params.awaitingField === "description"
-        ? "Envia ahora la descripcion breve. Usa - si no quieres descripcion."
-        : "Envia ahora el autor opcional. Usa - si no quieres autor."
+        ? "Envia ahora la descripcion. Usa - para vaciar."
+        : params.awaitingField === "author"
+          ? "Envia ahora el autor. Usa - para vaciar."
+          : "Edita campos y confirma."
 
   return [
     "Libros / PDFs",
     "",
+    "Editor de borrador",
+    `Archivo PDF: ${params.hasFile ? "Recibido ✅" : "Falta PDF"}`,
     `Titulo: ${params.title || "—"}`,
     `Descripcion: ${params.description || "—"}`,
     `Autor: ${params.author || "—"}`,
@@ -393,16 +399,20 @@ export function buildOwnerPdfAwaitingFieldText(params: {
   ].join("\n")
 }
 
-export function buildOwnerPdfConfirmText(params: { title: string; description: string; author: string; mimeType: string | null }) {
-  return [
-    "Libros / PDFs",
-    "",
-    "Confirmar publicacion",
-    `Titulo: ${params.title || "—"}`,
-    `Descripcion: ${params.description || "—"}`,
-    `Autor: ${params.author || "—"}`,
-    `Mime: ${params.mimeType || "—"}`,
-  ].join("\n")
+export function buildOwnerPdfDraftEditorKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [{ text: "Editar titulo", callback_data: "owner:pdfs:draft:field:title" }],
+      [{ text: "Editar descripcion", callback_data: "owner:pdfs:draft:field:description" }],
+      [{ text: "Editar autor", callback_data: "owner:pdfs:draft:field:author" }],
+      [{ text: "Confirmar publicacion", callback_data: "owner:pdfs:confirm" }],
+      [{ text: "Cancelar carga", callback_data: "owner:pdfs:cancel" }],
+      [
+        { text: "Volver", callback_data: "owner:pdfs" },
+        { text: "Menu principal", callback_data: "owner:main" },
+      ],
+    ],
+  }
 }
 
 export function buildOwnerVideoListKeyboard(
@@ -516,12 +526,12 @@ export function buildOwnerReadingEditorKeyboard(): InlineKeyboardMarkup {
 
 export function buildOwnerPdfListKeyboard(
   items: Array<{ id: string; title: string }>,
-  backCallback: string
+  backCallback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = items.map((item, index) => [
     {
       text: `${index + 1}. ${item.title.slice(0, 50)}`,
-      callback_data: `owner:pdfs:detail:${item.id}`,
+      callback_data: `owner:pdfs:detail:${item.id}:${backCallback}`,
     },
   ])
 
@@ -533,8 +543,15 @@ export function buildOwnerPdfListKeyboard(
   return { inline_keyboard: rows }
 }
 
-export function buildOwnerPdfDetailKeyboard(pdfId: string, isPublished: boolean, backCallback: string): InlineKeyboardMarkup {
+export function buildOwnerPdfDetailKeyboard(
+  pdfId: string,
+  isPublished: boolean,
+  backCallback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
+): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
+  rows.push([{ text: "Editar titulo", callback_data: `owner:pdfs:edit:title:${pdfId}:${backCallback}` }])
+  rows.push([{ text: "Editar descripcion", callback_data: `owner:pdfs:edit:description:${pdfId}:${backCallback}` }])
+  rows.push([{ text: "Editar autor", callback_data: `owner:pdfs:edit:author:${pdfId}:${backCallback}` }])
   rows.push([
     {
       text: isPublished ? "Ocultar libro" : "Restaurar libro",
@@ -625,6 +642,7 @@ export function buildOwnerRecommendConfirmKeyboard(youtubeVideoId: string): Inli
   return {
     inline_keyboard: [
       [{ text: "Confirmar publicacion", callback_data: `owner:recommend:confirm:${youtubeVideoId}` }],
+      [{ text: "Cancelar", callback_data: "owner:recommend" }],
       [
         { text: "Elegir categoria", callback_data: "owner:recommend:categories" },
         { text: "Menu principal", callback_data: "owner:main" },
