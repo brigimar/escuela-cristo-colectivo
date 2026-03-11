@@ -18,6 +18,14 @@ export type LibraryPdf = {
   updated_at: string
 }
 
+export type LibraryPdfEditField = "title" | "description" | "author"
+
+export type PdfEditorContextPayload = {
+  pdf_id: string
+  back_callback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
+  field: LibraryPdfEditField | null
+}
+
 function mapLibraryPdf(row: any): LibraryPdf | null {
   if (typeof row?.id !== "string" || typeof row?.title !== "string" || typeof row?.storage_bucket !== "string" || typeof row?.storage_path !== "string") {
     return null
@@ -118,4 +126,108 @@ export async function setLibraryPdfPublished(id: string, isPublished: boolean, a
     .eq("id", id)
 
   return !res.error
+}
+
+export async function updateLibraryPdfMetadata(
+  id: string,
+  field: LibraryPdfEditField,
+  value: string,
+  actor: string
+): Promise<boolean> {
+  const normalized = value.trim()
+  if (field === "title" && !normalized) return false
+
+  const patch: Record<string, unknown> = {
+    updated_by: actor,
+    updated_at: new Date().toISOString(),
+  }
+  patch[field] = field === "title" ? normalized : normalized || null
+
+  const res = await supabaseService
+    .from("library_pdfs")
+    .update(patch)
+    .eq("id", id)
+
+  return !res.error
+}
+
+function parsePdfEditorContext(row: any): PdfEditorContextPayload | null {
+  if (!row || !Array.isArray(row.items) || row.items.length === 0) return null
+  const first = row.items[0] as Record<string, unknown>
+  const pdfId = typeof first?.pdf_id === "string" ? first.pdf_id : ""
+  if (!pdfId) return null
+
+  const backCallback =
+    first?.back_callback === "owner:pdfs:published" ||
+    first?.back_callback === "owner:pdfs:hidden" ||
+    first?.back_callback === "owner:pdfs"
+      ? first.back_callback
+      : "owner:pdfs"
+
+  const field =
+    first?.field === "title" || first?.field === "description" || first?.field === "author"
+      ? first.field
+      : null
+
+  return {
+    pdf_id: pdfId,
+    back_callback: backCallback,
+    field,
+  }
+}
+
+export async function savePdfEditorContext(chatId: number, fromId: number, payload: PdfEditorContextPayload): Promise<void> {
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+
+  await supabaseService
+    .from("telegram_list_contexts")
+    .update({ is_active: false })
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "pdf_editor")
+    .eq("is_active", true)
+
+  const insertRes = await supabaseService
+    .from("telegram_list_contexts")
+    .insert({
+      chat_id: chatId,
+      from_id: fromId,
+      context_type: "pdf_editor",
+      category_slug: "library_pdfs",
+      list_offset: 0,
+      items: [payload],
+      expires_at: expiresAt,
+      is_active: true,
+    })
+
+  if (insertRes.error) throw new Error(insertRes.error.message)
+}
+
+export async function getPdfEditorContext(chatId: number, fromId: number): Promise<PdfEditorContextPayload | null> {
+  const res = await supabaseService
+    .from("telegram_list_contexts")
+    .select("items")
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "pdf_editor")
+    .eq("is_active", true)
+    .gt("expires_at", new Date().toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (res.error || !res.data) return null
+  return parsePdfEditorContext(res.data)
+}
+
+export async function clearPdfEditorContext(chatId: number, fromId: number): Promise<void> {
+  const res = await supabaseService
+    .from("telegram_list_contexts")
+    .update({ is_active: false })
+    .eq("chat_id", chatId)
+    .eq("from_id", fromId)
+    .eq("context_type", "pdf_editor")
+    .eq("is_active", true)
+
+  if (res.error) throw new Error(res.error.message)
 }
