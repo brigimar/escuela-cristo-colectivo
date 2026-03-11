@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { unstable_noStore as noStore } from "next/cache"
 import { getVideoRecommendation } from "@/features/recommendation/queries"
 
 function formatDate(value?: string | null) {
@@ -9,6 +10,7 @@ function formatDate(value?: string | null) {
 }
 
 export async function VideoRecomendado() {
+  noStore()
   const recommended = await getVideoRecommendation()
 
   return (
@@ -72,5 +74,4 @@ export async function VideoRecomendado() {
     </section>
   )
 }
-
 
