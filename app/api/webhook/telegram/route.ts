@@ -546,7 +546,15 @@ export async function POST(req: Request) {
 
   if (!chatId || !fromId) return new Response("ok")
 
-  if (callbackData) {
+  if (callback) {
+    console.log("TG CALLBACK DATA:", callbackData)
+    console.log("TG CALLBACK META:", {
+      callbackId,
+      callbackData,
+      chatId,
+      callbackMessageId,
+    })
+
     let callbackAnswered = false
     const safeAnswerCallback = async (text?: string) => {
       if (!callbackId || callbackAnswered) return
@@ -567,16 +575,21 @@ export async function POST(req: Request) {
 
       await safeAnswerCallback()
 
-    if (callbackData === "owner:main") {
-      await clearOwnerTransientState(chatId, fromId)
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: buildOwnerMainMenuText(),
-        replyMarkup: OWNER_MAIN_MENU_BUTTONS,
-      })
-      return new Response("ok")
-    }
+      if (!callbackData) {
+        console.warn("Unknown callback: empty callback_data", { callbackId, chatId, callbackMessageId })
+        return new Response("ok")
+      }
+
+      if (callbackData === "owner:main") {
+        await clearOwnerTransientState(chatId, fromId)
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: buildOwnerMainMenuText(),
+          replyMarkup: OWNER_MAIN_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
 
     if (callbackData === "owner:recommend") {
       await sendOrEditTelegramMessage({
@@ -1864,6 +1877,7 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
+      console.warn("Unknown callback:", callbackData)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
