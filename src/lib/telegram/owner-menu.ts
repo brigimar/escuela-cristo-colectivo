@@ -250,9 +250,9 @@ export const OWNER_AUDIO_MENU_BUTTONS: InlineKeyboardMarkup = {
 
 export const OWNER_QUESTIONS_MENU_BUTTONS: InlineKeyboardMarkup = {
   inline_keyboard: [
-    [{ text: "Ver pendientes", callback_data: "owner:questions:pending" }],
-    [{ text: "Ver seleccionadas", callback_data: "owner:questions:selected" }],
-    [{ text: "Ver ocultas", callback_data: "owner:questions:hidden" }],
+    [{ text: "Ver pendientes", callback_data: "owner:questions:pending:0" }],
+    [{ text: "Ver seleccionadas", callback_data: "owner:questions:selected:0" }],
+    [{ text: "Ver ocultas", callback_data: "owner:questions:hidden:0" }],
     [{ text: "Menu principal", callback_data: "owner:main" }],
   ],
 }

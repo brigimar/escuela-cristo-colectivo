@@ -60,21 +60,26 @@ function mapAudienceQuestion(row: any): AudienceQuestion {
   }
 }
 
-export async function listPendingAudienceQuestions(limit = 10, offset = 0): Promise<AudienceQuestion[]> {
-  try {
-    const res = await supabaseService
-      .from("video_questions")
-      .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
-      .eq("is_selected", false)
-      .eq("is_hidden", false)
-      .order("published_at", { ascending: false, nullsFirst: false })
-      .range(offset, offset + limit - 1)
+export async function listPendingAudienceQuestions(limit: number, offset: number): Promise<AudienceQuestion[]> {
+  const { data, error } = await supabaseService
+    .from("video_questions")
+    .select("id, author_name, text_display, published_at")
+    .eq("is_hidden", false)
+    .eq("is_selected", false)
+    .order("published_at", { ascending: false })
+    .range(offset, offset + limit - 1)
 
-    if (res.error || !Array.isArray(res.data)) return []
-    return res.data.map(mapAudienceQuestion).filter((row) => row.id)
-  } catch {
+  if (error) {
+    console.error("listPendingAudienceQuestions error", error)
     return []
   }
+
+  return (data ?? []).map((row: any) => ({
+    id: typeof row?.id === "string" ? row.id : "",
+    author_name: typeof row?.author_name === "string" ? row.author_name : null,
+    text_display: typeof row?.text_display === "string" ? row.text_display : null,
+    published_at: typeof row?.published_at === "string" ? row.published_at : null,
+  })).filter((row) => row.id)
 }
 
 export async function listSelectedAudienceQuestionsForOwner(limit = 10, offset = 0): Promise<AudienceQuestion[]> {

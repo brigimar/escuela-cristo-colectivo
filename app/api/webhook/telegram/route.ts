@@ -206,14 +206,14 @@ function buildQuestionListText(
     .join("\n\n")}`
 }
 
-const QUESTIONS_PAGE_SIZE = 5
+const PAGE_SIZE = 5
 
 async function loadQuestionsPage(
   listType: "pending" | "selected" | "hidden",
   offset: number
 ) {
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
-  const limit = QUESTIONS_PAGE_SIZE + 1
+  const limit = PAGE_SIZE + 1
   const list =
     listType === "pending"
       ? await listPendingAudienceQuestions(limit, safeOffset)
@@ -221,13 +221,8 @@ async function loadQuestionsPage(
         ? await listSelectedAudienceQuestionsForOwner(limit, safeOffset)
         : await listHiddenAudienceQuestions(limit, safeOffset)
 
-  const hasNext = list.length > QUESTIONS_PAGE_SIZE
-  const visible = hasNext ? list.slice(0, QUESTIONS_PAGE_SIZE) : list
-
-  if (visible.length === 0 && safeOffset > 0) {
-    const fallbackOffset = Math.max(0, safeOffset - QUESTIONS_PAGE_SIZE)
-    return loadQuestionsPage(listType, fallbackOffset)
-  }
+  const hasNext = list.length > PAGE_SIZE
+  const visible = list.slice(0, PAGE_SIZE)
 
   return { visible, hasNext, offset: safeOffset }
 }
@@ -1217,6 +1212,7 @@ export async function POST(req: Request) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
       const page = await loadQuestionsPage("pending", offset)
+      console.log("DEBUG QUESTIONS", { listType: "pending", offset: page.offset, count: page.visible.length })
       const textQuestions =
         page.visible.length > 0 ? buildQuestionListText("Preguntas pendientes", page.visible) : "No hay preguntas pendientes."
 
@@ -1227,7 +1223,7 @@ export async function POST(req: Request) {
         replyMarkup: page.visible.length > 0
           ? buildOwnerQuestionListKeyboard(page.visible, "pending", {
               offset: page.offset,
-              pageSize: QUESTIONS_PAGE_SIZE,
+              pageSize: PAGE_SIZE,
               hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
@@ -1239,6 +1235,7 @@ export async function POST(req: Request) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
       const page = await loadQuestionsPage("selected", offset)
+      console.log("DEBUG QUESTIONS", { listType: "selected", offset: page.offset, count: page.visible.length })
       const textQuestions =
         page.visible.length > 0 ? buildQuestionListText("Preguntas seleccionadas", page.visible) : "No hay preguntas seleccionadas."
 
@@ -1249,7 +1246,7 @@ export async function POST(req: Request) {
         replyMarkup: page.visible.length > 0
           ? buildOwnerQuestionListKeyboard(page.visible, "selected", {
               offset: page.offset,
-              pageSize: QUESTIONS_PAGE_SIZE,
+              pageSize: PAGE_SIZE,
               hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
@@ -1261,6 +1258,7 @@ export async function POST(req: Request) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
       const page = await loadQuestionsPage("hidden", offset)
+      console.log("DEBUG QUESTIONS", { listType: "hidden", offset: page.offset, count: page.visible.length })
       const textQuestions =
         page.visible.length > 0 ? buildQuestionListText("Preguntas ocultas", page.visible) : "No hay preguntas ocultas."
 
@@ -1271,7 +1269,7 @@ export async function POST(req: Request) {
         replyMarkup: page.visible.length > 0
           ? buildOwnerQuestionListKeyboard(page.visible, "hidden", {
               offset: page.offset,
-              pageSize: QUESTIONS_PAGE_SIZE,
+              pageSize: PAGE_SIZE,
               hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
@@ -1314,7 +1312,7 @@ export async function POST(req: Request) {
         replyMarkup: page.visible.length > 0
           ? buildOwnerQuestionListKeyboard(page.visible, listType, {
               offset: page.offset,
-              pageSize: QUESTIONS_PAGE_SIZE,
+              pageSize: PAGE_SIZE,
               hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
