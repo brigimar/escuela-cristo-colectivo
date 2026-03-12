@@ -196,12 +196,12 @@ function buildVideoListText(title: string, videos: Array<{ title: string; publis
 
 function buildQuestionListText(
   title: string,
-  questions: Array<{ author_name?: string | null; text_display?: string | null; published_at?: string | null; comment_id?: string | null }>
+  questions: Array<{ id: string; author_name?: string | null; text_display?: string | null; published_at?: string | null }>
 ) {
   return `${title}\n\n${questions
     .map(
       (question, index) =>
-        `${index + 1}. ${question.author_name || "Anonimo"}\n${question.text_display || "Sin texto"}\n${formatTelegramDate(question.published_at || null)}\nComment ID: ${question.comment_id || "—"}`
+        `${index + 1}. ${question.author_name || "Anonimo"}\n${question.text_display || "Sin texto"}\n${formatTelegramDate(question.published_at || null)}\nID: ${question.id}`
     )
     .join("\n\n")}`
 }
@@ -1212,7 +1212,12 @@ export async function POST(req: Request) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
       const page = await loadQuestionsPage("pending", offset)
-      console.log("DEBUG QUESTIONS", { listType: "pending", offset: page.offset, count: page.visible.length })
+      console.log("DEBUG QUESTIONS", {
+        listType: "pending",
+        offset: page.offset,
+        count: page.visible.length,
+        ids: page.visible.map((x) => x.id),
+      })
       const textQuestions =
         page.visible.length > 0 ? buildQuestionListText("Preguntas pendientes", page.visible) : "No hay preguntas pendientes."
 
