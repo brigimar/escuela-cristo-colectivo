@@ -47,7 +47,15 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
       source: "youtube_poll",
       status: "error",
       started_at: startedAtIso,
-      summary: {}
+      summary: {
+        fetchedCount: 0,
+        insertedCount: 0,
+        updatedCount: 0,
+        questionsAttempted: 0,
+        questionsUpserted: 0,
+        questionsFailed: 0,
+        questionsErrors: []
+      }
     })
     .select("id")
     .single()
@@ -62,6 +70,24 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
   let questionsUpserted = 0
   let questionsFailed = 0
   const questionsErrors: Array<{ youtube_video_id: string; error: string }> = []
+
+  const updateRun = async (payload: Record<string, unknown>) => {
+    const res = await supabaseService.from("sync_runs").update(payload).eq("id", runId)
+    if (res.error) {
+      console.error("sync_runs update failed", res.error.message)
+    }
+  }
+
+  const currentSummary = () => ({
+    runId,
+    fetchedCount,
+    insertedCount,
+    updatedCount,
+    questionsAttempted,
+    questionsUpserted,
+    questionsFailed,
+    questionsErrors
+  })
 
   try {
     const env = loadServerEnv()
@@ -89,22 +115,11 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
 
     fetchedCount = items.length
     if (items.length === 0) {
-      await supabaseService
-        .from("sync_runs")
-        .update({
-          status: "ok",
-          summary: {
-            runId,
-            fetchedCount: 0,
-            insertedCount: 0,
-            updatedCount: 0,
-            questionsAttempted: 0,
-            questionsUpserted: 0,
-            questionsFailed: 0,
-            questionsErrors: []
-          }
-        })
-        .eq("id", runId)
+      await updateRun({
+        status: "ok",
+        finished_at: new Date().toISOString(),
+        summary: currentSummary()
+      })
 
       return {
         runId,
@@ -147,7 +162,8 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
 
     if (upsertRes.error) throw new Error(upsertRes.error.message)
 
-    for (const youtubeVideoId of ids) {
+    for (let i = 0; i < ids.length; i++) {
+      const youtubeVideoId = ids[i]
       try {
         const result = await ingestVideoQuestions({
           apiKey: apiKeyValue,
@@ -161,24 +177,17 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
         const message = err instanceof Error ? err.message : "Unknown error"
         questionsErrors.push({ youtube_video_id: youtubeVideoId, error: message })
       }
+
+      if ((i + 1) % 10 === 0 || i === ids.length - 1) {
+        await updateRun({ summary: currentSummary() })
+      }
     }
 
-    await supabaseService
-      .from("sync_runs")
-      .update({
-        status: "ok",
-        summary: {
-          runId,
-          fetchedCount: ids.length,
-          insertedCount: insertedDelta,
-          updatedCount: updatedDelta,
-          questionsAttempted,
-          questionsUpserted,
-          questionsFailed,
-          questionsErrors
-        }
-      })
-      .eq("id", runId)
+    await updateRun({
+      status: "ok",
+      finished_at: new Date().toISOString(),
+      summary: currentSummary()
+    })
 
     return {
       runId,
@@ -194,24 +203,15 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
   } catch (err) {
     const missingEnv = readMissingEnv(err)
     const message = err instanceof Error ? err.message : "Unknown error"
-    await supabaseService
-      .from("sync_runs")
-      .update({
-        status: "error",
-        summary: {
-          runId,
-          fetchedCount,
-          insertedCount,
-          updatedCount,
-          questionsAttempted,
-          questionsUpserted,
-          questionsFailed,
-          questionsErrors,
-          error: message,
-          missingEnv
-        }
-      })
-      .eq("id", runId)
+    await updateRun({
+      status: "error",
+      finished_at: new Date().toISOString(),
+      summary: {
+        ...currentSummary(),
+        error: message,
+        missingEnv
+      }
+    })
 
     return {
       runId,
