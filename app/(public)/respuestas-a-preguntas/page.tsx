@@ -1,6 +1,8 @@
 import { listSelectedAudienceQuestions } from "@/features/questions/queries"
 import { listRespuestasAudio } from "@/features/audio/queries"
 
+export const revalidate = 60
+
 function formatDate(value?: string | null) {
   if (!value) return ""
   const date = new Date(value)

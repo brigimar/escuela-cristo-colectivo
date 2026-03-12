@@ -85,9 +85,9 @@ export function buildOwnerQuestionsText() {
     "",
     "Funciones reales disponibles:",
     "- ver preguntas pendientes",
-    "- ver preguntas seleccionadas",
+    "- ver preguntas publicadas",
     "- ver preguntas ocultas",
-    "- seleccionar, ocultar y restaurar",
+    "- publicar, quitar de web, ocultar y restaurar",
     "- ver detalle de cada pregunta",
   ].join("\n")
 }
@@ -258,9 +258,9 @@ export const OWNER_AUDIO_MENU_BUTTONS: InlineKeyboardMarkup = {
 
 export const OWNER_QUESTIONS_MENU_BUTTONS: InlineKeyboardMarkup = {
   inline_keyboard: [
-    [{ text: "Ver pendientes", callback_data: "owner:questions:pending:0" }],
-    [{ text: "Ver seleccionadas", callback_data: "owner:questions:selected:0" }],
-    [{ text: "Ver ocultas", callback_data: "owner:questions:hidden:0" }],
+    [{ text: "Ver pendientes", callback_data: "owner:qa:p:0" }],
+    [{ text: "Ver publicadas", callback_data: "owner:qa:s:0" }],
+    [{ text: "Ver ocultas", callback_data: "owner:qa:h:0" }],
     [{ text: "Menu principal", callback_data: "owner:main" }],
   ],
 }
@@ -455,22 +455,22 @@ export function buildOwnerQuestionListKeyboard(
     rows.push([
       {
         text: `${index + 1}. ${(item.author_name || "Anonimo").slice(0, 18)} - ${(item.text_display || "Sin texto").slice(0, 28)}`,
-        callback_data: `owner:qd:${listTypeCode}:${item.id}`,
+        callback_data: `owner:qd:${listTypeCode}:${item.id}:${offset}`,
       },
     ])
 
     if (listType === "pending") {
       rows.push([
-        { text: "Seleccionar", callback_data: `owner:qa:${listTypeCode}:s:${item.id}:${offset}` },
-        { text: "Ocultar", callback_data: `owner:qa:${listTypeCode}:h:${item.id}:${offset}` },
+        { text: "Publicar", callback_data: `owner:qs:pub:${item.id}:${listTypeCode}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qs:hid:${item.id}:${listTypeCode}:${offset}` },
       ])
     } else if (listType === "selected") {
       rows.push([
-        { text: "Quitar selección", callback_data: `owner:qa:${listTypeCode}:u:${item.id}:${offset}` },
-        { text: "Ocultar", callback_data: `owner:qa:${listTypeCode}:h:${item.id}:${offset}` },
+        { text: "Quitar de web", callback_data: `owner:qs:unp:${item.id}:${listTypeCode}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qs:hid:${item.id}:${listTypeCode}:${offset}` },
       ])
     } else {
-      rows.push([{ text: "Restaurar", callback_data: `owner:qa:${listTypeCode}:r:${item.id}:${offset}` }])
+      rows.push([{ text: "Restaurar", callback_data: `owner:qs:res:${item.id}:${listTypeCode}:${offset}` }])
     }
   })
 
@@ -478,15 +478,16 @@ export function buildOwnerQuestionListKeyboard(
     const navRow: InlineKeyboardButton[] = []
     if (params.offset > 0) {
       const prevOffset = Math.max(0, params.offset - params.pageSize)
-      navRow.push({ text: "Anterior", callback_data: `owner:questions:${listType}:${prevOffset}` })
+      navRow.push({ text: "Anterior", callback_data: `owner:qa:${listTypeCode}:${prevOffset}` })
     }
     if (params.hasNext) {
       const nextOffset = params.offset + params.pageSize
-      navRow.push({ text: "Siguiente", callback_data: `owner:questions:${listType}:${nextOffset}` })
+      navRow.push({ text: "Siguiente", callback_data: `owner:qa:${listTypeCode}:${nextOffset}` })
     }
     if (navRow.length) rows.push(navRow)
   }
 
+  rows.push([{ text: "Volver", callback_data: "owner:questions" }])
   rows.push([{ text: "Menu principal", callback_data: "owner:main" }])
 
   return { inline_keyboard: rows }
@@ -495,22 +496,25 @@ export function buildOwnerQuestionListKeyboard(
 export function buildOwnerQuestionDetailKeyboard(
   questionId: string,
   listType: QuestionListType,
-  state: { isSelected: boolean; isHidden: boolean }
+  state: { isSelected: boolean; isHidden: boolean },
+  offset = 0
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
   const listTypeCode = encodeQuestionListType(listType)
 
   if (state.isHidden) {
-    rows.push([{ text: "Restaurar pregunta", callback_data: `owner:qs:r:${questionId}:${listTypeCode}` }])
+    rows.push([{ text: "Restaurar", callback_data: `owner:qs:res:${questionId}:${listTypeCode}:${offset}` }])
   } else {
     if (!state.isSelected) {
-      rows.push([{ text: "Seleccionar pregunta", callback_data: `owner:qs:s:${questionId}:${listTypeCode}` }])
+      rows.push([{ text: "Publicar", callback_data: `owner:qs:pub:${questionId}:${listTypeCode}:${offset}` }])
+    } else {
+      rows.push([{ text: "Quitar de web", callback_data: `owner:qs:unp:${questionId}:${listTypeCode}:${offset}` }])
     }
-    rows.push([{ text: "Ocultar pregunta", callback_data: `owner:qs:h:${questionId}:${listTypeCode}` }])
+    rows.push([{ text: "Ocultar", callback_data: `owner:qs:hid:${questionId}:${listTypeCode}:${offset}` }])
   }
 
   rows.push([
-    { text: "Volver", callback_data: `owner:questions:${listType}` },
+    { text: "Volver", callback_data: `owner:qa:${listTypeCode}:${offset}` },
     { text: "Menu principal", callback_data: "owner:main" },
   ])
 

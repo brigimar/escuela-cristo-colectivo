@@ -35,10 +35,10 @@ import {
   hideAudienceQuestionById,
   listHiddenAudienceQuestions,
   listPendingAudienceQuestions,
+  publishAudienceQuestionById,
   listSelectedAudienceQuestionsForOwner,
   restoreAudienceQuestionById,
-  selectAudienceQuestionById,
-  unselectAudienceQuestionById,
+  unpublishAudienceQuestionById,
 } from "@/features/questions/queries"
 import {
   clearVideoSearchPrompt,
@@ -177,8 +177,24 @@ async function sendOrEditTelegramMessage(
   params: { chatId: number; text: string; replyMarkup?: TelegramReplyMarkup; messageId?: number | null }
 ) {
   if (typeof params.messageId === "number") {
-    await editTelegramMessage(params.chatId, params.messageId, params.text, params.replyMarkup)
-    return
+    try {
+      await editTelegramMessage(params.chatId, params.messageId, params.text, params.replyMarkup)
+      return
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      if (message.includes("message is not modified")) {
+        console.warn("editMessageText skipped: message is not modified", {
+          chatId: params.chatId,
+          messageId: params.messageId,
+        })
+        return
+      }
+      console.warn("editMessageText failed, fallback to sendMessage", {
+        chatId: params.chatId,
+        messageId: params.messageId,
+        message,
+      })
+    }
   }
 
   await sendTelegramMessage(params.chatId, params.text, params.replyMarkup)
@@ -201,12 +217,27 @@ function buildQuestionListText(
   return `${title}\n\n${questions
     .map(
       (question, index) =>
-        `${index + 1}. ${question.author_name || "Anonimo"}\n${question.text_display || "Sin texto"}\n${formatTelegramDate(question.published_at || null)}\nID: ${question.id}`
+        `${index + 1}. ${trimForTelegram(question.author_name || "Anonimo", 60)}\n${trimForTelegram(question.text_display || "Sin texto", 320)}\n${formatTelegramDate(question.published_at || null)}\nID: ${question.id}`
     )
     .join("\n\n")}`
 }
 
 const PAGE_SIZE = 5
+
+function decodeQuestionListType(value: string | null | undefined): "pending" | "selected" | "hidden" | null {
+  if (value === "pending" || value === "p") return "pending"
+  if (value === "selected" || value === "s") return "selected"
+  if (value === "hidden" || value === "h") return "hidden"
+  return null
+}
+
+function decodeQuestionAction(value: string | null | undefined): "publish" | "hide" | "unpublish" | "restore" | null {
+  if (value === "publish" || value === "pub" || value === "select" || value === "s") return "publish"
+  if (value === "hide" || value === "hid" || value === "h") return "hide"
+  if (value === "unpublish" || value === "unp" || value === "unselect" || value === "u") return "unpublish"
+  if (value === "restore" || value === "res" || value === "r") return "restore"
+  return null
+}
 
 async function loadQuestionsPage(
   listType: "pending" | "selected" | "hidden",
@@ -1202,113 +1233,44 @@ export async function POST(req: Request) {
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: "🔎 Encontrar preguntas",
+        text: buildOwnerQuestionsText(),
         replyMarkup: OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
 
-    if (callbackData === "owner:questions:pending" || callbackData.startsWith("owner:questions:pending:")) {
-      const rawOffset = callbackData.split(":")[3]
+    if (
+      callbackData === "owner:questions:pending" ||
+      callbackData.startsWith("owner:questions:pending:") ||
+      callbackData === "owner:questions:selected" ||
+      callbackData.startsWith("owner:questions:selected:") ||
+      callbackData === "owner:questions:hidden" ||
+      callbackData.startsWith("owner:questions:hidden:") ||
+      callbackData.startsWith("owner:qa:")
+    ) {
+      const parts = callbackData.split(":")
+      const rawListType =
+        callbackData.startsWith("owner:qa:")
+          ? parts[2]
+          : callbackData.includes(":pending")
+            ? "pending"
+            : callbackData.includes(":selected")
+              ? "selected"
+              : "hidden"
+      const listType = decodeQuestionListType(rawListType) || "pending"
+      const rawOffset = callbackData.startsWith("owner:qa:") ? parts[3] : parts[3]
       const offset = rawOffset ? Number(rawOffset) : 0
-      const page = await loadQuestionsPage("pending", offset)
+      const page = await loadQuestionsPage(listType, offset)
       console.log("DEBUG QUESTIONS", {
-        listType: "pending",
+        listType,
         offset: page.offset,
         count: page.visible.length,
         ids: page.visible.map((x) => x.id),
       })
-      const textQuestions =
-        page.visible.length > 0 ? buildQuestionListText("Preguntas pendientes", page.visible) : "No hay preguntas pendientes."
 
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: textQuestions,
-        replyMarkup: page.visible.length > 0
-          ? buildOwnerQuestionListKeyboard(page.visible, "pending", {
-              offset: page.offset,
-              pageSize: PAGE_SIZE,
-              hasNext: page.hasNext,
-            })
-          : OWNER_QUESTIONS_MENU_BUTTONS,
-      })
-      return new Response("ok")
-    }
-
-    if (callbackData === "owner:questions:selected" || callbackData.startsWith("owner:questions:selected:")) {
-      const rawOffset = callbackData.split(":")[3]
-      const offset = rawOffset ? Number(rawOffset) : 0
-      const page = await loadQuestionsPage("selected", offset)
-      console.log("DEBUG QUESTIONS", { listType: "selected", offset: page.offset, count: page.visible.length })
-      const textQuestions =
-        page.visible.length > 0 ? buildQuestionListText("Preguntas seleccionadas", page.visible) : "No hay preguntas seleccionadas."
-
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: textQuestions,
-        replyMarkup: page.visible.length > 0
-          ? buildOwnerQuestionListKeyboard(page.visible, "selected", {
-              offset: page.offset,
-              pageSize: PAGE_SIZE,
-              hasNext: page.hasNext,
-            })
-          : OWNER_QUESTIONS_MENU_BUTTONS,
-      })
-      return new Response("ok")
-    }
-
-    if (callbackData === "owner:questions:hidden" || callbackData.startsWith("owner:questions:hidden:")) {
-      const rawOffset = callbackData.split(":")[3]
-      const offset = rawOffset ? Number(rawOffset) : 0
-      const page = await loadQuestionsPage("hidden", offset)
-      console.log("DEBUG QUESTIONS", { listType: "hidden", offset: page.offset, count: page.visible.length })
-      const textQuestions =
-        page.visible.length > 0 ? buildQuestionListText("Preguntas ocultas", page.visible) : "No hay preguntas ocultas."
-
-      await sendOrEditTelegramMessage({
-        chatId,
-        messageId: callbackMessageId,
-        text: textQuestions,
-        replyMarkup: page.visible.length > 0
-          ? buildOwnerQuestionListKeyboard(page.visible, "hidden", {
-              offset: page.offset,
-              pageSize: PAGE_SIZE,
-              hasNext: page.hasNext,
-            })
-          : OWNER_QUESTIONS_MENU_BUTTONS,
-      })
-      return new Response("ok")
-    }
-
-    if (callbackData.startsWith("owner:qaction:")) {
-      const parts = callbackData.split(":")
-      const listType = parts[2] === "pending" || parts[2] === "selected" || parts[2] === "hidden" ? parts[2] : null
-      const action = parts[3]
-      const questionId = parts[4] || ""
-      const offset = Number(parts[5] || 0)
-      const selectedBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
-
-      if (!listType || !questionId) {
-        return new Response("ok")
-      }
-
-      if (action === "select") {
-        await selectAudienceQuestionById(questionId, selectedBy)
-      } else if (action === "hide") {
-        await hideAudienceQuestionById(questionId)
-      } else if (action === "unselect") {
-        await unselectAudienceQuestionById(questionId)
-      } else if (action === "restore") {
-        await restoreAudienceQuestionById(questionId)
-      }
-
-      const page = await loadQuestionsPage(listType, offset)
-      const title =
-        listType === "pending" ? "Preguntas pendientes" : listType === "selected" ? "Preguntas seleccionadas" : "Preguntas ocultas"
-      const textQuestions =
-        page.visible.length > 0 ? buildQuestionListText(title, page.visible) : "No hay preguntas para mostrar."
+      const title = listType === "pending" ? "Preguntas pendientes" : listType === "selected" ? "Preguntas publicadas" : "Preguntas ocultas"
+      const emptyText = listType === "pending" ? "No hay preguntas pendientes." : listType === "selected" ? "No hay preguntas publicadas." : "No hay preguntas ocultas."
+      const textQuestions = page.visible.length > 0 ? buildQuestionListText(title, page.visible) : emptyText
 
       await sendOrEditTelegramMessage({
         chatId,
@@ -1325,10 +1287,56 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    if (callbackData.startsWith("owner:questions:detail:")) {
+    if (callbackData.startsWith("owner:qaction:") || callbackData.startsWith("owner:qs:")) {
       const parts = callbackData.split(":")
-      const questionId = parts[3] || ""
-      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const isNewFormat = callbackData.startsWith("owner:qs:")
+      const action = decodeQuestionAction(isNewFormat ? parts[2] : parts[3])
+      const questionId = isNewFormat ? (parts[3] || "") : (parts[4] || "")
+      const listType = decodeQuestionListType(isNewFormat ? parts[4] : parts[2])
+      const rawOffset = isNewFormat ? parts[5] : parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+
+      if (!listType || !action || !questionId) {
+        return new Response("ok")
+      }
+
+      if (action === "publish") {
+        await publishAudienceQuestionById(questionId, actor)
+      } else if (action === "hide") {
+        await hideAudienceQuestionById(questionId)
+      } else if (action === "unpublish") {
+        await unpublishAudienceQuestionById(questionId)
+      } else if (action === "restore") {
+        await restoreAudienceQuestionById(questionId)
+      }
+
+      const page = await loadQuestionsPage(listType, offset)
+      const title = listType === "pending" ? "Preguntas pendientes" : listType === "selected" ? "Preguntas publicadas" : "Preguntas ocultas"
+      const textQuestions = page.visible.length > 0 ? buildQuestionListText(title, page.visible) : "No hay preguntas para mostrar."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textQuestions,
+        replyMarkup: page.visible.length > 0
+          ? buildOwnerQuestionListKeyboard(page.visible, listType, {
+              offset: page.offset,
+              pageSize: PAGE_SIZE,
+              hasNext: page.hasNext,
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:detail:") || callbackData.startsWith("owner:qd:")) {
+      const parts = callbackData.split(":")
+      const questionId = callbackData.startsWith("owner:qd:") ? (parts[3] || "") : (parts[3] || "")
+      const rawListType = callbackData.startsWith("owner:qd:") ? parts[2] : parts[4]
+      const rawOffset = callbackData.startsWith("owner:qd:") ? parts[4] : parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const listType = decodeQuestionListType(rawListType) || "pending"
       const question = await getAudienceQuestionById(questionId)
 
       if (!question) {
@@ -1341,7 +1349,7 @@ export async function POST(req: Request) {
         return new Response("ok")
       }
 
-      const stateLabel = question.is_hidden ? "Oculta" : question.is_selected ? "Seleccionada" : "Pendiente"
+      const stateLabel = question.is_hidden ? "Oculta" : question.is_selected ? "Publicada" : "Pendiente"
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -1360,7 +1368,7 @@ export async function POST(req: Request) {
         replyMarkup: buildOwnerQuestionDetailKeyboard(question.id, listType, {
           isSelected: Boolean(question.is_selected),
           isHidden: Boolean(question.is_hidden),
-        }),
+        }, offset),
       })
       return new Response("ok")
     }
@@ -1368,9 +1376,12 @@ export async function POST(req: Request) {
     if (callbackData.startsWith("owner:questions:select:")) {
       const parts = callbackData.split(":")
       const questionId = parts[3] || ""
-      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const rawListType = parts[4]
+      const rawOffset = parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const listType = decodeQuestionListType(rawListType) || "pending"
       const selectedBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
-      const ok = await selectAudienceQuestionById(questionId, selectedBy)
+      const ok = await publishAudienceQuestionById(questionId, selectedBy)
       const question = await getAudienceQuestionById(questionId)
 
       await sendOrEditTelegramMessage({
@@ -1379,17 +1390,17 @@ export async function POST(req: Request) {
         text:
           ok && question
             ? [
-                "Pregunta seleccionada ✅",
+                "Pregunta publicada en web ✅",
                 "",
                 `Autor: ${question.author_name || "Anonimo"}`,
                 question.text_display || "Sin texto",
               ].join("\n")
-            : "No pude seleccionar esa pregunta.",
+            : "No pude publicar esa pregunta.",
         replyMarkup: question
           ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
               isSelected: Boolean(question.is_selected),
               isHidden: Boolean(question.is_hidden),
-            })
+            }, offset)
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
@@ -1398,7 +1409,10 @@ export async function POST(req: Request) {
     if (callbackData.startsWith("owner:questions:hide:")) {
       const parts = callbackData.split(":")
       const questionId = parts[3] || ""
-      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "pending"
+      const rawListType = parts[4]
+      const rawOffset = parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const listType = decodeQuestionListType(rawListType) || "pending"
       const ok = await hideAudienceQuestionById(questionId)
       const question = await getAudienceQuestionById(questionId)
 
@@ -1418,7 +1432,7 @@ export async function POST(req: Request) {
           ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
               isSelected: Boolean(question.is_selected),
               isHidden: Boolean(question.is_hidden),
-            })
+            }, offset)
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
@@ -1427,7 +1441,10 @@ export async function POST(req: Request) {
     if (callbackData.startsWith("owner:questions:restore:")) {
       const parts = callbackData.split(":")
       const questionId = parts[3] || ""
-      const listType = parts[4] === "selected" || parts[4] === "hidden" ? parts[4] : "hidden"
+      const rawListType = parts[4]
+      const rawOffset = parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const listType = decodeQuestionListType(rawListType) || "hidden"
       const ok = await restoreAudienceQuestionById(questionId)
       const question = await getAudienceQuestionById(questionId)
 
@@ -1447,7 +1464,39 @@ export async function POST(req: Request) {
           ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
               isSelected: Boolean(question.is_selected),
               isHidden: Boolean(question.is_hidden),
-            })
+            }, offset)
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:questions:unselect:")) {
+      const parts = callbackData.split(":")
+      const questionId = parts[3] || ""
+      const rawListType = parts[4]
+      const rawOffset = parts[5]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const listType = decodeQuestionListType(rawListType) || "selected"
+      const ok = await unpublishAudienceQuestionById(questionId)
+      const question = await getAudienceQuestionById(questionId)
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text:
+          ok && question
+            ? [
+                "Pregunta quitada de web ✅",
+                "",
+                `Autor: ${question.author_name || "Anonimo"}`,
+                question.text_display || "Sin texto",
+              ].join("\n")
+            : "No pude quitar esa pregunta de web.",
+        replyMarkup: question
+          ? buildOwnerQuestionDetailKeyboard(question.id, listType, {
+              isSelected: Boolean(question.is_selected),
+              isHidden: Boolean(question.is_hidden),
+            }, offset)
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")

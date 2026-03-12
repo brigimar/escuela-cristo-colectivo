@@ -132,7 +132,7 @@ export async function getAudienceQuestionById(id: string): Promise<AudienceQuest
   }
 }
 
-export async function selectAudienceQuestionById(id: string, selectedBy: string): Promise<boolean> {
+export async function publishAudienceQuestionById(id: string, selectedBy: string): Promise<boolean> {
   const res = await supabaseService
     .from("video_questions")
     .update({
@@ -146,25 +146,7 @@ export async function selectAudienceQuestionById(id: string, selectedBy: string)
   return !res.error
 }
 
-export async function hideAudienceQuestionById(id: string): Promise<boolean> {
-  const res = await supabaseService
-    .from("video_questions")
-    .update({ is_hidden: true })
-    .eq("id", id)
-
-  return !res.error
-}
-
-export async function restoreAudienceQuestionById(id: string): Promise<boolean> {
-  const res = await supabaseService
-    .from("video_questions")
-    .update({ is_hidden: false })
-    .eq("id", id)
-
-  return !res.error
-}
-
-export async function unselectAudienceQuestionById(id: string): Promise<boolean> {
+export async function unpublishAudienceQuestionById(id: string): Promise<boolean> {
   const res = await supabaseService
     .from("video_questions")
     .update({
@@ -176,6 +158,42 @@ export async function unselectAudienceQuestionById(id: string): Promise<boolean>
     .eq("id", id)
 
   return !res.error
+}
+
+export async function hideAudienceQuestionById(id: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({
+      is_hidden: true,
+      is_selected: false,
+      selected_at: null,
+      selected_by: null,
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function restoreAudienceQuestionById(id: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({
+      is_hidden: false,
+      is_selected: false,
+      selected_at: null,
+      selected_by: null,
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function selectAudienceQuestionById(id: string, selectedBy: string): Promise<boolean> {
+  return publishAudienceQuestionById(id, selectedBy)
+}
+
+export async function unselectAudienceQuestionById(id: string): Promise<boolean> {
+  return unpublishAudienceQuestionById(id)
 }
 
 export async function mapVideoSlugsByYoutubeId(
