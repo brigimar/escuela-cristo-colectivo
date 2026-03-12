@@ -547,12 +547,25 @@ export async function POST(req: Request) {
   if (!chatId || !fromId) return new Response("ok")
 
   if (callbackData) {
-    if (!isOwner(fromId)) {
-      if (callbackId) await answerTelegramCallbackQuery(callbackId, "No autorizado")
-      return new Response("ok")
+    let callbackAnswered = false
+    const safeAnswerCallback = async (text?: string) => {
+      if (!callbackId || callbackAnswered) return
+      try {
+        await answerTelegramCallbackQuery(callbackId, text)
+        callbackAnswered = true
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error"
+        console.error("callback_query answer failed", { callbackId, callbackData, message })
+      }
     }
 
-    if (callbackId) await answerTelegramCallbackQuery(callbackId)
+    try {
+      if (!isOwner(fromId)) {
+        await safeAnswerCallback("No autorizado")
+        return new Response("ok")
+      }
+
+      await safeAnswerCallback()
 
     if (callbackData === "owner:main") {
       await clearOwnerTransientState(chatId, fromId)
@@ -1851,12 +1864,20 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    await sendOrEditTelegramMessage({
-      chatId,
-      messageId: callbackMessageId,
-      text: buildOwnerMainMenuText(),
-      replyMarkup: OWNER_MAIN_MENU_BUTTONS,
-    })
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildOwnerMainMenuText(),
+        replyMarkup: OWNER_MAIN_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      console.error("callback_query handler failed", { callbackId, callbackData, message })
+    } finally {
+      await safeAnswerCallback()
+    }
+
     return new Response("ok")
   }
 
