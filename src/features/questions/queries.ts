@@ -159,6 +159,20 @@ export async function restoreAudienceQuestionById(id: string): Promise<boolean> 
   return !res.error
 }
 
+export async function unselectAudienceQuestionById(id: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("video_questions")
+    .update({
+      is_selected: false,
+      is_hidden: false,
+      selected_at: null,
+      selected_by: null,
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
 export async function mapVideoSlugsByYoutubeId(
   youtubeIds: string[]
 ): Promise<Record<string, string>> {

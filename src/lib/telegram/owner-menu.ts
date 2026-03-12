@@ -439,12 +439,31 @@ export function buildOwnerQuestionListKeyboard(
   listType: "pending" | "selected" | "hidden",
   params?: { offset: number; pageSize: number; hasNext: boolean }
 ): InlineKeyboardMarkup {
-  const rows: InlineKeyboardButton[][] = items.map((item, index) => [
-    {
-      text: `${index + 1}. ${(item.author_name || "Anonimo").slice(0, 18)} - ${(item.text_display || "Sin texto").slice(0, 28)}`,
-      callback_data: `owner:questions:detail:${item.id}:${listType}`,
-    },
-  ])
+  const rows: InlineKeyboardButton[][] = []
+  const offset = params?.offset ?? 0
+
+  items.forEach((item, index) => {
+    rows.push([
+      {
+        text: `${index + 1}. ${(item.author_name || "Anonimo").slice(0, 18)} - ${(item.text_display || "Sin texto").slice(0, 28)}`,
+        callback_data: `owner:questions:detail:${item.id}:${listType}`,
+      },
+    ])
+
+    if (listType === "pending") {
+      rows.push([
+        { text: "Seleccionar", callback_data: `owner:qaction:pending:select:${item.id}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qaction:pending:hide:${item.id}:${offset}` },
+      ])
+    } else if (listType === "selected") {
+      rows.push([
+        { text: "Quitar selección", callback_data: `owner:qaction:selected:unselect:${item.id}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qaction:selected:hide:${item.id}:${offset}` },
+      ])
+    } else {
+      rows.push([{ text: "Restaurar", callback_data: `owner:qaction:hidden:restore:${item.id}:${offset}` }])
+    }
+  })
 
   if (params) {
     const navRow: InlineKeyboardButton[] = []

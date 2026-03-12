@@ -38,6 +38,7 @@ import {
   listSelectedAudienceQuestionsForOwner,
   restoreAudienceQuestionById,
   selectAudienceQuestionById,
+  unselectAudienceQuestionById,
 } from "@/features/questions/queries"
 import {
   clearVideoSearchPrompt,
@@ -203,6 +204,32 @@ function buildQuestionListText(
         `${index + 1}. ${question.author_name || "Anonimo"}\n${question.text_display || "Sin texto"}\n${formatTelegramDate(question.published_at || null)}\nComment ID: ${question.comment_id || "—"}`
     )
     .join("\n\n")}`
+}
+
+const QUESTIONS_PAGE_SIZE = 5
+
+async function loadQuestionsPage(
+  listType: "pending" | "selected" | "hidden",
+  offset: number
+) {
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
+  const limit = QUESTIONS_PAGE_SIZE + 1
+  const list =
+    listType === "pending"
+      ? await listPendingAudienceQuestions(limit, safeOffset)
+      : listType === "selected"
+        ? await listSelectedAudienceQuestionsForOwner(limit, safeOffset)
+        : await listHiddenAudienceQuestions(limit, safeOffset)
+
+  const hasNext = list.length > QUESTIONS_PAGE_SIZE
+  const visible = hasNext ? list.slice(0, QUESTIONS_PAGE_SIZE) : list
+
+  if (visible.length === 0 && safeOffset > 0) {
+    const fallbackOffset = Math.max(0, safeOffset - QUESTIONS_PAGE_SIZE)
+    return loadQuestionsPage(listType, fallbackOffset)
+  }
+
+  return { visible, hasNext, offset: safeOffset }
 }
 
 function buildAnswerListText(title: string, answers: Array<{ title: string; created_at: string; created_by: string | null }>) {
@@ -1141,22 +1168,19 @@ export async function POST(req: Request) {
     if (callbackData === "owner:questions:pending" || callbackData.startsWith("owner:questions:pending:")) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
-      const pageSize = 5
-      const questions = await listPendingAudienceQuestions(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
-      const hasNext = questions.length > pageSize
-      const visible = hasNext ? questions.slice(0, pageSize) : questions
+      const page = await loadQuestionsPage("pending", offset)
       const textQuestions =
-        visible.length > 0 ? buildQuestionListText("Preguntas pendientes", visible) : "No hay preguntas pendientes."
+        page.visible.length > 0 ? buildQuestionListText("Preguntas pendientes", page.visible) : "No hay preguntas pendientes."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: visible.length > 0
-          ? buildOwnerQuestionListKeyboard(visible, "pending", {
-              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
-              pageSize,
-              hasNext,
+        replyMarkup: page.visible.length > 0
+          ? buildOwnerQuestionListKeyboard(page.visible, "pending", {
+              offset: page.offset,
+              pageSize: QUESTIONS_PAGE_SIZE,
+              hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
@@ -1166,22 +1190,19 @@ export async function POST(req: Request) {
     if (callbackData === "owner:questions:selected" || callbackData.startsWith("owner:questions:selected:")) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
-      const pageSize = 5
-      const questions = await listSelectedAudienceQuestionsForOwner(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
-      const hasNext = questions.length > pageSize
-      const visible = hasNext ? questions.slice(0, pageSize) : questions
+      const page = await loadQuestionsPage("selected", offset)
       const textQuestions =
-        visible.length > 0 ? buildQuestionListText("Preguntas seleccionadas", visible) : "No hay preguntas seleccionadas."
+        page.visible.length > 0 ? buildQuestionListText("Preguntas seleccionadas", page.visible) : "No hay preguntas seleccionadas."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: visible.length > 0
-          ? buildOwnerQuestionListKeyboard(visible, "selected", {
-              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
-              pageSize,
-              hasNext,
+        replyMarkup: page.visible.length > 0
+          ? buildOwnerQuestionListKeyboard(page.visible, "selected", {
+              offset: page.offset,
+              pageSize: QUESTIONS_PAGE_SIZE,
+              hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
@@ -1191,22 +1212,62 @@ export async function POST(req: Request) {
     if (callbackData === "owner:questions:hidden" || callbackData.startsWith("owner:questions:hidden:")) {
       const rawOffset = callbackData.split(":")[3]
       const offset = rawOffset ? Number(rawOffset) : 0
-      const pageSize = 5
-      const questions = await listHiddenAudienceQuestions(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
-      const hasNext = questions.length > pageSize
-      const visible = hasNext ? questions.slice(0, pageSize) : questions
+      const page = await loadQuestionsPage("hidden", offset)
       const textQuestions =
-        visible.length > 0 ? buildQuestionListText("Preguntas ocultas", visible) : "No hay preguntas ocultas."
+        page.visible.length > 0 ? buildQuestionListText("Preguntas ocultas", page.visible) : "No hay preguntas ocultas."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: visible.length > 0
-          ? buildOwnerQuestionListKeyboard(visible, "hidden", {
-              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
-              pageSize,
-              hasNext,
+        replyMarkup: page.visible.length > 0
+          ? buildOwnerQuestionListKeyboard(page.visible, "hidden", {
+              offset: page.offset,
+              pageSize: QUESTIONS_PAGE_SIZE,
+              hasNext: page.hasNext,
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:qaction:")) {
+      const parts = callbackData.split(":")
+      const listType = parts[2] === "pending" || parts[2] === "selected" || parts[2] === "hidden" ? parts[2] : null
+      const action = parts[3]
+      const questionId = parts[4] || ""
+      const offset = Number(parts[5] || 0)
+      const selectedBy = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+
+      if (!listType || !questionId) {
+        return new Response("ok")
+      }
+
+      if (action === "select") {
+        await selectAudienceQuestionById(questionId, selectedBy)
+      } else if (action === "hide") {
+        await hideAudienceQuestionById(questionId)
+      } else if (action === "unselect") {
+        await unselectAudienceQuestionById(questionId)
+      } else if (action === "restore") {
+        await restoreAudienceQuestionById(questionId)
+      }
+
+      const page = await loadQuestionsPage(listType, offset)
+      const title =
+        listType === "pending" ? "Preguntas pendientes" : listType === "selected" ? "Preguntas seleccionadas" : "Preguntas ocultas"
+      const textQuestions =
+        page.visible.length > 0 ? buildQuestionListText(title, page.visible) : "No hay preguntas para mostrar."
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: textQuestions,
+        replyMarkup: page.visible.length > 0
+          ? buildOwnerQuestionListKeyboard(page.visible, listType, {
+              offset: page.offset,
+              pageSize: QUESTIONS_PAGE_SIZE,
+              hasNext: page.hasNext,
             })
           : OWNER_QUESTIONS_MENU_BUTTONS,
       })
