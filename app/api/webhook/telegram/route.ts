@@ -126,9 +126,9 @@ type TelegramUpdate = {
   callback_query?: TelegramCallbackQuery
 }
 
-type TelegramInlineKeyboardMarkup = {
-  inline_keyboard: Array<Array<{ text: string; callback_data: string }>>
-}
+type TelegramReplyMarkup =
+  | { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
+  | { remove_keyboard: true }
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const { TELEGRAM_BOT_TOKEN } = loadServerEnv()
@@ -148,7 +148,7 @@ async function callTelegram(method: string, payload: Record<string, unknown>) {
   }
 }
 
-async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: TelegramInlineKeyboardMarkup) {
+async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: TelegramReplyMarkup) {
   await callTelegram("sendMessage", {
     chat_id: chatId,
     text,
@@ -156,7 +156,7 @@ async function sendTelegramMessage(chatId: number, text: string, replyMarkup?: T
   })
 }
 
-async function editTelegramMessage(chatId: number, messageId: number, text: string, replyMarkup?: TelegramInlineKeyboardMarkup) {
+async function editTelegramMessage(chatId: number, messageId: number, text: string, replyMarkup?: TelegramReplyMarkup) {
   await callTelegram("editMessageText", {
     chat_id: chatId,
     message_id: messageId,
@@ -173,7 +173,7 @@ async function answerTelegramCallbackQuery(callbackQueryId: string, text?: strin
 }
 
 async function sendOrEditTelegramMessage(
-  params: { chatId: number; text: string; replyMarkup?: TelegramInlineKeyboardMarkup; messageId?: number | null }
+  params: { chatId: number; text: string; replyMarkup?: TelegramReplyMarkup; messageId?: number | null }
 ) {
   if (typeof params.messageId === "number") {
     await editTelegramMessage(params.chatId, params.messageId, params.text, params.replyMarkup)
@@ -1138,44 +1138,77 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    if (callbackData === "owner:questions:pending") {
-      const questions = await listPendingAudienceQuestions(10)
+    if (callbackData === "owner:questions:pending" || callbackData.startsWith("owner:questions:pending:")) {
+      const rawOffset = callbackData.split(":")[3]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const pageSize = 5
+      const questions = await listPendingAudienceQuestions(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
+      const hasNext = questions.length > pageSize
+      const visible = hasNext ? questions.slice(0, pageSize) : questions
       const textQuestions =
-        questions.length > 0 ? buildQuestionListText("Preguntas pendientes", questions) : "No hay preguntas pendientes."
+        visible.length > 0 ? buildQuestionListText("Preguntas pendientes", visible) : "No hay preguntas pendientes."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "pending") : OWNER_QUESTIONS_MENU_BUTTONS,
+        replyMarkup: visible.length > 0
+          ? buildOwnerQuestionListKeyboard(visible, "pending", {
+              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
+              pageSize,
+              hasNext,
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
 
-    if (callbackData === "owner:questions:selected") {
-      const questions = await listSelectedAudienceQuestionsForOwner(10)
+    if (callbackData === "owner:questions:selected" || callbackData.startsWith("owner:questions:selected:")) {
+      const rawOffset = callbackData.split(":")[3]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const pageSize = 5
+      const questions = await listSelectedAudienceQuestionsForOwner(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
+      const hasNext = questions.length > pageSize
+      const visible = hasNext ? questions.slice(0, pageSize) : questions
       const textQuestions =
-        questions.length > 0 ? buildQuestionListText("Preguntas seleccionadas", questions) : "No hay preguntas seleccionadas."
+        visible.length > 0 ? buildQuestionListText("Preguntas seleccionadas", visible) : "No hay preguntas seleccionadas."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "selected") : OWNER_QUESTIONS_MENU_BUTTONS,
+        replyMarkup: visible.length > 0
+          ? buildOwnerQuestionListKeyboard(visible, "selected", {
+              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
+              pageSize,
+              hasNext,
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
 
-    if (callbackData === "owner:questions:hidden") {
-      const questions = await listHiddenAudienceQuestions(10)
+    if (callbackData === "owner:questions:hidden" || callbackData.startsWith("owner:questions:hidden:")) {
+      const rawOffset = callbackData.split(":")[3]
+      const offset = rawOffset ? Number(rawOffset) : 0
+      const pageSize = 5
+      const questions = await listHiddenAudienceQuestions(pageSize + 1, Number.isFinite(offset) && offset >= 0 ? offset : 0)
+      const hasNext = questions.length > pageSize
+      const visible = hasNext ? questions.slice(0, pageSize) : questions
       const textQuestions =
-        questions.length > 0 ? buildQuestionListText("Preguntas ocultas", questions) : "No hay preguntas ocultas."
+        visible.length > 0 ? buildQuestionListText("Preguntas ocultas", visible) : "No hay preguntas ocultas."
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
         text: textQuestions,
-        replyMarkup: questions.length > 0 ? buildOwnerQuestionListKeyboard(questions, "hidden") : OWNER_QUESTIONS_MENU_BUTTONS,
+        replyMarkup: visible.length > 0
+          ? buildOwnerQuestionListKeyboard(visible, "hidden", {
+              offset: Number.isFinite(offset) && offset >= 0 ? offset : 0,
+              pageSize,
+              hasNext,
+            })
+          : OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
     }
@@ -1896,6 +1929,7 @@ export async function POST(req: Request) {
   }
 
   if (text.startsWith("/menu")) {
+    await sendTelegramMessage(chatId, "Actualizando menú…", { remove_keyboard: true })
     await sendTelegramMessage(chatId, buildOwnerMainMenuText(), OWNER_MAIN_MENU_BUTTONS)
     return new Response("ok")
   }

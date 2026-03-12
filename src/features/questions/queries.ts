@@ -60,7 +60,7 @@ function mapAudienceQuestion(row: any): AudienceQuestion {
   }
 }
 
-export async function listPendingAudienceQuestions(limit = 10): Promise<AudienceQuestion[]> {
+export async function listPendingAudienceQuestions(limit = 10, offset = 0): Promise<AudienceQuestion[]> {
   try {
     const res = await supabaseService
       .from("video_questions")
@@ -68,7 +68,7 @@ export async function listPendingAudienceQuestions(limit = 10): Promise<Audience
       .eq("is_selected", false)
       .eq("is_hidden", false)
       .order("published_at", { ascending: false, nullsFirst: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (res.error || !Array.isArray(res.data)) return []
     return res.data.map(mapAudienceQuestion).filter((row) => row.id)
@@ -77,7 +77,7 @@ export async function listPendingAudienceQuestions(limit = 10): Promise<Audience
   }
 }
 
-export async function listSelectedAudienceQuestionsForOwner(limit = 10): Promise<AudienceQuestion[]> {
+export async function listSelectedAudienceQuestionsForOwner(limit = 10, offset = 0): Promise<AudienceQuestion[]> {
   try {
     const res = await supabaseService
       .from("video_questions")
@@ -86,7 +86,7 @@ export async function listSelectedAudienceQuestionsForOwner(limit = 10): Promise
       .eq("is_hidden", false)
       .order("selected_at", { ascending: false, nullsFirst: false })
       .order("published_at", { ascending: false, nullsFirst: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (res.error || !Array.isArray(res.data)) return []
     return res.data.map(mapAudienceQuestion).filter((row) => row.id)
@@ -95,14 +95,14 @@ export async function listSelectedAudienceQuestionsForOwner(limit = 10): Promise
   }
 }
 
-export async function listHiddenAudienceQuestions(limit = 10): Promise<AudienceQuestion[]> {
+export async function listHiddenAudienceQuestions(limit = 10, offset = 0): Promise<AudienceQuestion[]> {
   try {
     const res = await supabaseService
       .from("video_questions")
       .select("id, youtube_video_id, comment_id, author_name, text_display, like_count, published_at, selected_at, is_selected, is_hidden, selected_by")
       .eq("is_hidden", true)
       .order("updated_at", { ascending: false, nullsFirst: false })
-      .limit(limit)
+      .range(offset, offset + limit - 1)
 
     if (res.error || !Array.isArray(res.data)) return []
     return res.data.map(mapAudienceQuestion).filter((row) => row.id)

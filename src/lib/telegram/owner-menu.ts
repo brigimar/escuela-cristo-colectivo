@@ -436,7 +436,8 @@ export function buildOwnerVideoListKeyboard(
 
 export function buildOwnerQuestionListKeyboard(
   items: Array<{ id: string; author_name?: string | null; text_display?: string | null }>,
-  listType: "pending" | "selected" | "hidden"
+  listType: "pending" | "selected" | "hidden",
+  params?: { offset: number; pageSize: number; hasNext: boolean }
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = items.map((item, index) => [
     {
@@ -445,10 +446,20 @@ export function buildOwnerQuestionListKeyboard(
     },
   ])
 
-  rows.push([
-    { text: "Volver", callback_data: "owner:questions" },
-    { text: "Menu principal", callback_data: "owner:main" },
-  ])
+  if (params) {
+    const navRow: InlineKeyboardButton[] = []
+    if (params.offset > 0) {
+      const prevOffset = Math.max(0, params.offset - params.pageSize)
+      navRow.push({ text: "Anterior", callback_data: `owner:questions:${listType}:${prevOffset}` })
+    }
+    if (params.hasNext) {
+      const nextOffset = params.offset + params.pageSize
+      navRow.push({ text: "Siguiente", callback_data: `owner:questions:${listType}:${nextOffset}` })
+    }
+    if (navRow.length) rows.push(navRow)
+  }
+
+  rows.push([{ text: "Menu principal", callback_data: "owner:main" }])
 
   return { inline_keyboard: rows }
 }
