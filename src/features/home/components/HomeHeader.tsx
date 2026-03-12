@@ -31,16 +31,15 @@ export function HomeHeader() {
             className="inline-flex min-w-0 max-w-[78%] items-center gap-3 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8f6a11] sm:max-w-none"
             onClick={() => setIsOpen(false)}
           >
-            <span className="relative inline-flex h-10 w-10 shrink-0 overflow-hidden rounded-xl bg-[#fffaf0] ring-1 ring-[#cfbb93] sm:h-11 sm:w-11 lg:h-12 lg:w-12">
-              <Image
-  src="/logo.png"
-  alt="Escuela de Cristo"
-  fill
-  priority
-  sizes="(max-width: 640px) 40px, (max-width: 1024px) 44px, 48px"
-  className="object-contain p-0"
-/>
-            </span>
+            <Image
+              src="/logo.png"
+              alt="Escuela de Cristo"
+              width={320}
+              height={120}
+              priority
+              sizes="(max-width: 768px) 160px, 192px"
+              className="h-10 w-auto shrink-0 object-contain md:h-12"
+            />
           </Link>
 
           <button
