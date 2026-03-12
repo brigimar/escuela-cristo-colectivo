@@ -74,9 +74,9 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
             {isLive ? "En vivo ahora" : "Contenido oficial"}
           </p>
 
-          <h1 className="mt-3 max-w-[11ch] text-[2.2rem] font-semibold leading-[1.02] tracking-tight text-black min-[430px]:max-w-[12ch] min-[430px]:text-[2.5rem] sm:mt-4 sm:max-w-[14ch] sm:text-[3.1rem] lg:text-[4rem]">
-            Donde el Espíritu Santo en cada corazón
-            <span className="block">expresa la vida de Jesús</span>
+          <h1 className="mt-3 max-w-[11ch] text-[1.4rem] font-semibold leading-[1.02] tracking-tight text-black min-[430px]:max-w-[12ch] min-[430px]:text-[2.5rem] sm:mt-4 sm:max-w-[14ch] sm:text-[3.1rem] lg:text-[4rem]">
+            Cristo en nosotros, 
+            <span className="block">la esperanza de gloria</span>
           </h1>
 
           <p className="mt-3 max-w-xl text-sm leading-6 text-black/70 sm:mt-4 sm:text-base sm:leading-7 lg:text-lg">

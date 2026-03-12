@@ -108,7 +108,7 @@ const BASE_OPTIONS: Omit<DonationOption, "href">[] = [
 
 export function Donations({
   links,
-  note = "Este bloque es deliberadamente sobrio (sin presión)."
+  note = "La generosidad es una ofrenda: sin ataduras y por amor"
 }: {
   links?: Partial<Record<DonationKind, string>>
   note?: string
@@ -125,9 +125,9 @@ export function Donations({
         <div className="text-center">
           <div className="text-xs font-semibold tracking-widest uppercase text-neutral-500">Sostener</div>
           <h2 id="donaciones-title" className="mt-3 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl">
-            Donaciones
+            Generosidad
           </h2>
-          <p className="mt-3 text-base text-neutral-600 sm:text-lg">Si este trabajo te bendice, podés ayudar a sostenerlo.</p>
+          <p className="mt-3 text-base text-neutral-600 sm:text-lg">Si este enseñanza te edifica, podés colaborar y sostenerla.</p>
         </div>
 
         {/* Cards Grid */}
