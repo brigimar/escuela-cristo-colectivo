@@ -15,6 +15,10 @@ export type RefreshVideosResult = {
   fetchedCount: number
   insertedCount: number
   updatedCount: number
+  questionsAttempted: number
+  questionsUpserted: number
+  questionsFailed: number
+  questionsErrors: Array<{ youtube_video_id: string; error: string }>
   error?: string
   missingEnv?: string[]
 }
@@ -93,7 +97,11 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
             runId,
             fetchedCount: 0,
             insertedCount: 0,
-            updatedCount: 0
+            updatedCount: 0,
+            questionsAttempted: 0,
+            questionsUpserted: 0,
+            questionsFailed: 0,
+            questionsErrors: []
           }
         })
         .eq("id", runId)
@@ -103,7 +111,11 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
         status: "ok",
         fetchedCount: 0,
         insertedCount: 0,
-        updatedCount: 0
+        updatedCount: 0,
+        questionsAttempted: 0,
+        questionsUpserted: 0,
+        questionsFailed: 0,
+        questionsErrors: []
       }
     }
 
