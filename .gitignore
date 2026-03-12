@@ -39,3 +39,4 @@ supabase/.temp/
 *.zip
 *.7z
 
+.vercel
