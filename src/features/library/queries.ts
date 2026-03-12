@@ -61,6 +61,50 @@ export async function listPublishedLibraryPdfs(limit = 20): Promise<LibraryPdf[]
   return res.data.map(mapLibraryPdf).filter((row): row is LibraryPdf => Boolean(row))
 }
 
+export type ListPublishedLibraryPdfsPageInput = {
+  page: number
+  pageSize: number
+  query?: string
+}
+
+export type ListPublishedLibraryPdfsPageResult = {
+  items: LibraryPdf[]
+  total: number
+}
+
+export async function listPublishedLibraryPdfsPage(
+  input: ListPublishedLibraryPdfsPageInput
+): Promise<ListPublishedLibraryPdfsPageResult> {
+  const safePage = Number.isFinite(input.page) && input.page > 0 ? Math.floor(input.page) : 1
+  const safePageSize = Number.isFinite(input.pageSize) && input.pageSize > 0 ? Math.floor(input.pageSize) : 12
+  const start = (safePage - 1) * safePageSize
+  const end = start + safePageSize - 1
+  const q = (input.query || "").trim()
+
+  let request = supabasePublic
+    .from("library_pdfs")
+    .select(
+      "id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, created_by, created_at, updated_by, updated_at",
+      { count: "exact" }
+    )
+    .eq("is_published", true)
+    .order("created_at", { ascending: false, nullsFirst: false })
+
+  if (q) {
+    request = request.or(`title.ilike.%${q}%,author.ilike.%${q}%`)
+  }
+
+  const res = await request.range(start, end)
+  if (res.error || !Array.isArray(res.data)) {
+    return { items: [], total: 0 }
+  }
+
+  return {
+    items: res.data.map(mapLibraryPdf).filter((row): row is LibraryPdf => Boolean(row)),
+    total: res.count ?? 0,
+  }
+}
+
 export async function listLibraryPdfsByVisibility(isPublished: boolean, limit = 20): Promise<LibraryPdf[]> {
   const res = await supabaseService
     .from("library_pdfs")

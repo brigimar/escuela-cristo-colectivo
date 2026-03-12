@@ -9,6 +9,14 @@ export type InlineKeyboardMarkup = {
   inline_keyboard: InlineKeyboardButton[][]
 }
 
+type QuestionListType = "pending" | "selected" | "hidden"
+
+function encodeQuestionListType(listType: QuestionListType): "p" | "s" | "h" {
+  if (listType === "selected") return "s"
+  if (listType === "hidden") return "h"
+  return "p"
+}
+
 export const OWNER_MENU_TITLE = "Panel Owner - Escuela de Cristo"
 
 export const OWNER_MAIN_MENU_BUTTONS: InlineKeyboardMarkup = {
@@ -436,32 +444,33 @@ export function buildOwnerVideoListKeyboard(
 
 export function buildOwnerQuestionListKeyboard(
   items: Array<{ id: string; author_name?: string | null; text_display?: string | null }>,
-  listType: "pending" | "selected" | "hidden",
+  listType: QuestionListType,
   params?: { offset: number; pageSize: number; hasNext: boolean }
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
   const offset = params?.offset ?? 0
+  const listTypeCode = encodeQuestionListType(listType)
 
   items.forEach((item, index) => {
     rows.push([
       {
         text: `${index + 1}. ${(item.author_name || "Anonimo").slice(0, 18)} - ${(item.text_display || "Sin texto").slice(0, 28)}`,
-        callback_data: `owner:questions:detail:${item.id}:${listType}`,
+        callback_data: `owner:qd:${listTypeCode}:${item.id}`,
       },
     ])
 
     if (listType === "pending") {
       rows.push([
-        { text: "Seleccionar", callback_data: `owner:qaction:pending:select:${item.id}:${offset}` },
-        { text: "Ocultar", callback_data: `owner:qaction:pending:hide:${item.id}:${offset}` },
+        { text: "Seleccionar", callback_data: `owner:qa:${listTypeCode}:s:${item.id}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qa:${listTypeCode}:h:${item.id}:${offset}` },
       ])
     } else if (listType === "selected") {
       rows.push([
-        { text: "Quitar selección", callback_data: `owner:qaction:selected:unselect:${item.id}:${offset}` },
-        { text: "Ocultar", callback_data: `owner:qaction:selected:hide:${item.id}:${offset}` },
+        { text: "Quitar selección", callback_data: `owner:qa:${listTypeCode}:u:${item.id}:${offset}` },
+        { text: "Ocultar", callback_data: `owner:qa:${listTypeCode}:h:${item.id}:${offset}` },
       ])
     } else {
-      rows.push([{ text: "Restaurar", callback_data: `owner:qaction:hidden:restore:${item.id}:${offset}` }])
+      rows.push([{ text: "Restaurar", callback_data: `owner:qa:${listTypeCode}:r:${item.id}:${offset}` }])
     }
   })
 
@@ -485,18 +494,19 @@ export function buildOwnerQuestionListKeyboard(
 
 export function buildOwnerQuestionDetailKeyboard(
   questionId: string,
-  listType: "pending" | "selected" | "hidden",
+  listType: QuestionListType,
   state: { isSelected: boolean; isHidden: boolean }
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
+  const listTypeCode = encodeQuestionListType(listType)
 
   if (state.isHidden) {
-    rows.push([{ text: "Restaurar pregunta", callback_data: `owner:questions:restore:${questionId}:${listType}` }])
+    rows.push([{ text: "Restaurar pregunta", callback_data: `owner:qs:r:${questionId}:${listTypeCode}` }])
   } else {
     if (!state.isSelected) {
-      rows.push([{ text: "Seleccionar pregunta", callback_data: `owner:questions:select:${questionId}:${listType}` }])
+      rows.push([{ text: "Seleccionar pregunta", callback_data: `owner:qs:s:${questionId}:${listTypeCode}` }])
     }
-    rows.push([{ text: "Ocultar pregunta", callback_data: `owner:questions:hide:${questionId}:${listType}` }])
+    rows.push([{ text: "Ocultar pregunta", callback_data: `owner:qs:h:${questionId}:${listTypeCode}` }])
   }
 
   rows.push([

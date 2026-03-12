@@ -146,7 +146,7 @@ export default async function Page() {
 
             <div className="mt-9 flex justify-center">
               <SecondaryButton href="/videos" icon="library_books">
-                Ir a /videos
+                Ir a / libros
               </SecondaryButton>
             </div>
           </div>
