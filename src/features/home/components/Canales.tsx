@@ -70,7 +70,7 @@ export function Channels() {
       title: "YouTube",
       description: "Canal oficial: @JoaquinPensa. Enseñanzas completas y directos.",
       icon: <IconYouTube className="h-6 w-6" />,
-      href: "#", // Reemplazar con link real
+      href: "https://youtube.com/@joaquinpensa", // Reemplazar con link real
       buttonText: "Ver en el sitio",
     },
     {
@@ -78,7 +78,7 @@ export function Channels() {
       title: "Instagram",
       description: "Clips cortos, reflexiones y novedades del día a día.",
       icon: <IconInstagram className="h-6 w-6" />,
-      href: "#", 
+      href: "https://www.instagram.com/joaco.pensa", 
       buttonText: "Seguir",
     },
     {
@@ -86,15 +86,15 @@ export function Channels() {
       title: "TikTok",
       description: "Fragmentos destacados y enseñanzas breves en video.",
       icon: <IconTikTok className="h-6 w-6" />,
-      href: "#", 
+      href: "https://www.tiktok.com/@joaco.pensa", 
       buttonText: "Ver perfil",
     },
     {
       id: "whatsapp",
       title: "WhatsApp",
-      description: "Comunidad oficial para avisos directos en tu celular.",
+      description: "Comunidad oficial Cristo Colectivo.",
       icon: <IconWhatsApp className="h-6 w-6" />,
-      href: "#", 
+      href: "https://chat.whatsapp.com/JSjT5PypZgPGbuj9wny0Qa", 
       buttonText: "Unirme",
     },
     {
@@ -102,7 +102,7 @@ export function Channels() {
       title: "Telegram",
       description: "Canal de difusión con material de estudio y audios.",
       icon: <IconTelegram className="h-6 w-6" />,
-      href: "#", 
+      href: "https://t.me/labiblianarrada", 
       buttonText: "Suscribirme",
     },
     {

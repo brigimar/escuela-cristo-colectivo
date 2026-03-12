@@ -72,8 +72,14 @@ type DonationOption = {
   title: string
   description: string
   Icon: (props: React.SVGProps<SVGSVGElement>) => JSX.Element
-  href?: string // si falta, CTA disabled
+  href?: string
   buttonText: string
+}
+
+const DEFAULT_LINKS: Record<DonationKind, string> = {
+  mercadopago: "https://link.mercadopago.com.ar/ofrendaesvoluntaria",
+  paypal: "mailto:K_mila.dh@hotmail.com",
+  transferencia: "https://wise.com/pay/r/Miljl9L03wIpWUc",
 }
 
 const BASE_OPTIONS: Omit<DonationOption, "href">[] = [
@@ -87,16 +93,16 @@ const BASE_OPTIONS: Omit<DonationOption, "href">[] = [
   {
     id: "paypal",
     title: "PayPal",
-    description: "Para aportes internacionales desde cualquier parte del mundo en dólares.",
+    description: "Para aportes internacionales desde cualquier parte del mundo en dólares. Enviá tu donación a K_mila.dh@hotmail.com.",
     Icon: IconPayPal,
     buttonText: "Donar con PayPal"
   },
   {
     id: "transferencia",
     title: "Otros medios",
-    description: "Datos bancarios para transferencias directas (CBU/Alias) u otros métodos.",
+    description: "Wise (internacional) · Llave PIX Brasil: CPF 800.622.699-76. Transferencias directas desde cualquier país.",
     Icon: IconBank,
-    buttonText: "Ver datos"
+    buttonText: "Donar con Wise"
   }
 ]
 
@@ -109,7 +115,7 @@ export function Donations({
 }) {
   const donationOptions: DonationOption[] = BASE_OPTIONS.map((o) => ({
     ...o,
-    href: links?.[o.id]
+    href: links?.[o.id] ?? DEFAULT_LINKS[o.id],
   }))
 
   return (
