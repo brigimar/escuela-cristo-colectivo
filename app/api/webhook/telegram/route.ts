@@ -382,6 +382,18 @@ async function clearPendingPdf(chatId: number) {
   await supabaseService.from("telegram_pending_pdf").delete().eq("chat_id", chatId)
 }
 
+async function clearOwnerTransientState(chatId: number, fromId: number) {
+  await Promise.all([
+    clearPendingAudio(chatId),
+    clearPendingPdf(chatId),
+    clearAudioSearchPrompt(chatId, fromId),
+    clearAudioEditTitlePrompt(chatId, fromId),
+    clearVideoSearchPrompt(chatId, fromId),
+    clearReadingEditorContext(chatId, fromId),
+    clearPdfEditorContext(chatId, fromId),
+  ])
+}
+
 async function publishPendingAudio(params: {
   chatId: number
   fromId: number
@@ -543,6 +555,7 @@ export async function POST(req: Request) {
     if (callbackId) await answerTelegramCallbackQuery(callbackId)
 
     if (callbackData === "owner:main") {
+      await clearOwnerTransientState(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -588,6 +601,9 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:audio") {
+      await clearPendingAudio(chatId)
+      await clearAudioSearchPrompt(chatId, fromId)
+      await clearAudioEditTitlePrompt(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -598,6 +614,8 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:answers") {
+      await clearAudioSearchPrompt(chatId, fromId)
+      await clearAudioEditTitlePrompt(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -698,6 +716,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:reading") {
+      await clearReadingEditorContext(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -865,6 +884,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:pdfs") {
+      await clearPendingPdf(chatId)
       await clearPdfEditorContext(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
@@ -876,6 +896,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:pdfs:published") {
+      await clearPendingPdf(chatId)
       await clearPdfEditorContext(chatId, fromId)
       const items = await listLibraryPdfsByVisibility(true, 10)
       const textItems =
@@ -893,6 +914,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:pdfs:hidden") {
+      await clearPendingPdf(chatId)
       await clearPdfEditorContext(chatId, fromId)
       const items = await listLibraryPdfsByVisibility(false, 10)
       const textItems =
@@ -1159,7 +1181,7 @@ export async function POST(req: Request) {
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: buildOwnerQuestionsText(),
+        text: "🔎 Encontrar preguntas",
         replyMarkup: OWNER_QUESTIONS_MENU_BUTTONS,
       })
       return new Response("ok")
@@ -1500,6 +1522,7 @@ export async function POST(req: Request) {
     }
 
     if (callbackData === "owner:videos") {
+      await clearVideoSearchPrompt(chatId, fromId)
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
@@ -1990,6 +2013,7 @@ export async function POST(req: Request) {
   }
 
   if (text.startsWith("/menu")) {
+    await clearOwnerTransientState(chatId, fromId)
     await sendTelegramMessage(chatId, "Actualizando menú…", { remove_keyboard: true })
     await sendTelegramMessage(chatId, buildOwnerMainMenuText(), OWNER_MAIN_MENU_BUTTONS)
     return new Response("ok")
