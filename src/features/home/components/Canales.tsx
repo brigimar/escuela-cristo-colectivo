@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { PREMIUM_CARD_BASE_CLASS, PREMIUM_CARD_INTERACTIVE_CLASS, SECONDARY_BUTTON_CLASS, premiumChipClass } from "@/features/home/components/ui"
 
 // --- Iconos SVG Minimalistas ---
 function IconYouTube(props: React.SVGProps<SVGSVGElement>) {
@@ -140,16 +141,13 @@ export function Channels() {
           {channels.map((channel) => (
             <div
               key={channel.id}
-              className={[
-                "group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white p-6",
-                "border border-neutral-200 shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
-                "transition-all duration-300 ease-out",
-                "hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]"
-              ].join(" ")}
-            >
+                className={[
+                  `group relative flex flex-col justify-between overflow-hidden p-6 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`
+                ].join(" ")}
+              >
               <div>
                 <div className="mb-4 flex items-center gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-neutral-800 ring-1 ring-neutral-200/50 transition-colors group-hover:bg-amber-100 group-hover:text-amber-900 group-hover:ring-amber-200">
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center text-neutral-800 transition-colors group-hover:text-[#6d5318] ${premiumChipClass("warm")}`}>
                     {channel.icon}
                   </div>
                   <h3 className="text-lg font-semibold text-neutral-900">
@@ -165,10 +163,8 @@ export function Channels() {
                 <Link
                   href={channel.href}
                   className={[
-                    "inline-flex w-fit items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5",
-                    "text-sm font-medium text-neutral-900 border border-neutral-200",
-                    "transition-colors duration-200 group-hover:bg-neutral-50",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
+                    SECONDARY_BUTTON_CLASS,
+                    "w-fit h-10 px-4 text-sm sm:h-10 sm:px-4 sm:text-sm"
                   ].join(" ")}
                 >
                   <IconExternalLink className="h-4 w-4 text-neutral-500 transition-colors group-hover:text-neutral-900" />

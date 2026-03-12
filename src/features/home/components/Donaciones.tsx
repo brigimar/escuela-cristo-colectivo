@@ -1,4 +1,5 @@
 import Link from "next/link"
+import { PREMIUM_CARD_BASE_CLASS, PREMIUM_CARD_INTERACTIVE_CLASS, PRIMARY_BUTTON_CLASS, premiumChipClass } from "@/features/home/components/ui"
 
 // --- Iconos SVG Minimalistas ---
 function IconMercadoPago(props: React.SVGProps<SVGSVGElement>) {
@@ -139,14 +140,11 @@ export function Donations({
               <article
                 key={option.id}
                 className={[
-                  "group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white p-6 md:p-8",
-                  "border border-neutral-200 shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
-                  "transition-all duration-300 ease-out",
-                  "hover:-translate-y-1 hover:border-neutral-300 hover:shadow-[0_12px_40px_rgba(0,0,0,0.08)]"
+                  `group relative flex flex-col justify-between overflow-hidden p-6 md:p-8 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`
                 ].join(" ")}
               >
                 <div>
-                  <div className="inline-flex items-center justify-center rounded-xl bg-neutral-100 p-3 text-neutral-800 ring-1 ring-neutral-200/50">
+                  <div className={`inline-flex items-center justify-center p-3 text-neutral-800 ${premiumChipClass("warm")}`}>
                     <option.Icon className="h-6 w-6" />
                   </div>
 
@@ -169,11 +167,9 @@ export function Donations({
                   ) : (
                     <Link
                       href={option.href!}
-                      className={[
-                        "inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3",
-                        "text-sm font-medium border transition-colors duration-200",
-                        "bg-neutral-50 text-neutral-900 border-neutral-200 group-hover:bg-amber-300 group-hover:border-amber-300 group-hover:text-amber-950",
-                        "focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 focus-visible:ring-offset-2"
+                        className={[
+                        PRIMARY_BUTTON_CLASS,
+                        "w-full text-sm"
                       ].join(" ")}
                     >
                       {option.buttonText}

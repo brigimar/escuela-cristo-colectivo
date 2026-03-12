@@ -1,5 +1,12 @@
 import Link from "next/link"
 import { listSelectedAudienceQuestions, mapVideoSlugsByYoutubeId } from "@/features/questions/queries"
+import {
+  PRIMARY_BUTTON_CLASS,
+  PREMIUM_CARD_BASE_CLASS,
+  PREMIUM_CARD_INTERACTIVE_CLASS,
+  premiumChipClass,
+  SECONDARY_BUTTON_CLASS,
+} from "@/features/home/components/ui"
 
 function formatDate(value?: string | null) {
   if (!value) return ""
@@ -45,7 +52,7 @@ export async function PreguntasAudiencia() {
               return (
                 <article
                   key={q.id}
-                  className="group flex h-full flex-col rounded-3xl border border-[#dccbac] bg-[#fffdf9] p-6 shadow-[0_10px_28px_rgba(62,44,16,0.10)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_40px_rgba(62,44,16,0.16)]"
+                  className={`group flex h-full flex-col p-6 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`}
                 >
                   <p className="line-clamp-4 text-[15px] leading-7 text-[#241d12] md:text-base">
                     {q.text_display || "Pregunta sin texto disponible."}
@@ -53,21 +60,21 @@ export async function PreguntasAudiencia() {
 
                   <div className="mt-5 flex flex-wrap items-center gap-2 text-[11px] font-medium">
                     {q.author_name ? (
-                      <span className="inline-flex items-center rounded-full border border-[#d8c4a0] bg-[#f7f0e1] px-3 py-1 text-[#5b4522]">
+                      <span className={premiumChipClass("warm")}>
                         {q.author_name}
                       </span>
                     ) : null}
                     {typeof q.like_count === "number" ? (
-                      <span className="inline-flex items-center rounded-full border border-[#cfd7e6] bg-[#eff4ff] px-3 py-1 text-[#3d4f78]">
+                      <span className={premiumChipClass("neutral")}>
                         {q.like_count} likes
                       </span>
                     ) : null}
                     {dateLabel ? (
-                      <span className="inline-flex items-center rounded-full border border-[#d6cfbe] bg-[#f5f3ee] px-3 py-1 text-[#5f5a4f]">
+                      <span className={premiumChipClass("ink")}>
                         {dateLabel}
                       </span>
                     ) : null}
-                    <span className="inline-flex items-center rounded-full border border-[#e1cf9e] bg-[#f8efd4] px-3 py-1 text-[#6d5318]">
+                    <span className={premiumChipClass("warm")}>
                       Publicada
                     </span>
                   </div>
@@ -75,7 +82,7 @@ export async function PreguntasAudiencia() {
                   <div className="mt-6 flex items-center gap-3">
                     <Link
                       href={teachingHref}
-                      className="inline-flex items-center justify-center rounded-xl border border-[#d8be84] bg-[#f3e6c5] px-4 py-2.5 text-xs font-semibold text-[#2d2312] transition-all hover:bg-[#edd9ab] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8f6a11] focus-visible:ring-offset-2"
+                      className={`${PRIMARY_BUTTON_CLASS} h-10 px-4 py-0 text-xs sm:h-10 sm:px-4 sm:text-xs`}
                     >
                       {teachingLabel}
                     </Link>
@@ -84,7 +91,7 @@ export async function PreguntasAudiencia() {
                         href={commentHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="rounded text-xs font-medium text-[#675b47] underline-offset-2 transition-colors hover:text-[#1f1a12] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8f6a11] focus-visible:ring-offset-2"
+                        className={`${SECONDARY_BUTTON_CLASS} h-10 px-4 py-0 text-xs sm:h-10 sm:px-4 sm:text-xs`}
                       >
                         Ver comentario
                       </a>

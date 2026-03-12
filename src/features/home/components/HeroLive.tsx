@@ -1,5 +1,12 @@
 import React from "react";
 import Link from "next/link";
+import {
+  PRIMARY_BUTTON_CLASS,
+  PREMIUM_CARD_BASE_CLASS,
+  PREMIUM_CARD_INTERACTIVE_CLASS,
+  premiumChipClass,
+  SECONDARY_BUTTON_CLASS,
+} from "@/features/home/components/ui";
 
 type LatestVideo = {
   youtube_video_id?: string;
@@ -69,7 +76,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
     <section aria-label="Hero principal" className="relative w-full overflow-x-clip">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12 lg:items-center lg:gap-6 xl:gap-8">
         <div className="order-1 w-full lg:col-span-6">
-          <p className="inline-flex max-w-full items-center gap-2 rounded-full border border-black/10 bg-black/5 px-3 py-1 text-xs leading-tight text-black/70 sm:text-sm">
+          <p className={`inline-flex max-w-full items-center gap-2 leading-tight sm:text-sm ${premiumChipClass("warm")}`}>
             <Icon name="verified" className="h-4 w-4 fill-current sm:h-[18px] sm:w-[18px]" />
             {isLive ? "En vivo ahora" : "Contenido oficial"}
           </p>
@@ -86,7 +93,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
           <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:flex-wrap">
             <Link
               href={latestHref}
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-black ring-1 ring-black/5 shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition hover:brightness-95 active:brightness-90 sm:h-12 sm:w-auto sm:px-5 sm:text-base"
+              className={`${PRIMARY_BUTTON_CLASS} w-full sm:w-auto`}
               aria-label="Ver lo más reciente"
             >
               <Icon name="play" className="h-5 w-5 fill-current" />
@@ -95,7 +102,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
 
             <Link
               href="/videos"
-              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white/80 px-4 text-sm text-black ring-1 ring-black/10 transition hover:bg-white sm:h-12 sm:w-auto sm:px-5 sm:text-base"
+              className={`${SECONDARY_BUTTON_CLASS} w-full sm:w-auto`}
               aria-label="Ir a la biblioteca"
             >
               Ir a la biblioteca
@@ -108,7 +115,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
               { k: "Fuente", v: "Canal oficial" },
               { k: "Acceso", v: "Gratis" },
             ].map((x) => (
-              <div key={x.k} className="rounded-2xl bg-white/70 p-3.5 ring-1 ring-black/10 sm:p-4">
+              <div key={x.k} className={`${PREMIUM_CARD_BASE_CLASS} p-3.5 sm:p-4`}>
                 <p className="text-xs text-black/60 sm:text-sm">{x.k}</p>
                 <p className="mt-1 text-sm font-medium text-black sm:text-base">{x.v}</p>
               </div>
@@ -118,7 +125,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
 
         <aside className="order-2 w-full pt-1 sm:pt-2 lg:col-span-6 lg:pt-0">
           <div className="relative mx-0 w-full max-w-none sm:mx-auto sm:max-w-[38rem] lg:max-w-none">
-            <div className="relative overflow-hidden rounded-2xl bg-white/75 p-3 ring-1 ring-black/10 shadow-[0_8px_24px_rgba(0,0,0,0.05)] sm:p-4 lg:p-5">
+            <div className={`relative overflow-hidden p-3 sm:p-4 lg:p-5 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs text-black/60 sm:text-sm">Encuentro</p>
@@ -132,7 +139,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                   </p>
                 </div>
 
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/80 sm:h-10 sm:w-10">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0dfb9] text-[#6e5421] sm:h-10 sm:w-10">
                   <Icon
                     name={isLive ? "radio" : "youtube"}
                     className="h-4 w-4 fill-current sm:h-5 sm:w-5"
@@ -143,7 +150,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
               <div className="mt-3.5 space-y-3">
                 {isLive ? (
                   <>
-                    <div className="aspect-[16/9.6] overflow-hidden rounded-xl bg-black shadow-inner sm:aspect-[16/9.2] lg:aspect-[16/8.1]">
+                    <div className="aspect-[16/9.6] overflow-hidden rounded-2xl bg-black shadow-inner sm:aspect-[16/9.2] lg:aspect-[16/8.1]">
                       {liveSrc ? (
                         <iframe
                           src={liveSrc}
@@ -175,7 +182,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                   <>
                     <Link
                       href={latestHref}
-                      className="relative block aspect-[16/9.6] overflow-hidden rounded-xl ring-1 ring-black/10 sm:aspect-[16/9.2] lg:aspect-[16/8.1]"
+                      className="relative block aspect-[16/9.6] overflow-hidden rounded-2xl ring-1 ring-black/10 sm:aspect-[16/9.2] lg:aspect-[16/8.1]"
                       aria-label={`Abrir: ${videoTitle}`}
                     >
                       <img
@@ -185,7 +192,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <span className="rounded-full bg-primary p-3 shadow-lg sm:p-4">
+                        <span className="rounded-full bg-[linear-gradient(180deg,#e6c24a_0%,#d5ad2f_100%)] p-3 text-[#1f1b16] shadow-lg sm:p-4">
                           <Icon name="play" className="h-5 w-5 fill-current sm:h-6 sm:w-6" />
                         </span>
                       </div>
@@ -193,7 +200,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
 
                     <Link
                       href="/videos"
-                      className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-black ring-1 ring-black/5 transition hover:brightness-95 active:brightness-90 sm:h-12 sm:text-base"
+                      className={`${PRIMARY_BUTTON_CLASS} w-full`}
                       aria-label="Ver últimos videos"
                     >
                       Ver últimos videos
@@ -209,6 +216,5 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
     </section>
   );
 }
-
 
 
