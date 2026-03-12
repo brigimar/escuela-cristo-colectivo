@@ -6,13 +6,17 @@ type IngestQuestionResult = {
   insertedOrUpdated: number
 }
 
-const QUESTION_PREFIXES = ["pregunta", "consulta", "duda"]
-
 export function isQuestionText(text: string): boolean {
   const normalized = text.trim().toLowerCase()
   if (!normalized) return false
-  if (normalized.includes("?")) return true
-  return QUESTION_PREFIXES.some((prefix) => normalized.startsWith(prefix))
+  return normalized.includes("?") || normalized.includes("¿")
+}
+
+function isRecentPublishedAt(value: string, days = 14): boolean {
+  const published = new Date(value)
+  if (Number.isNaN(published.getTime())) return false
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000
+  return published.getTime() >= cutoff
 }
 
 export async function ingestVideoQuestions(params: {
@@ -32,7 +36,9 @@ export async function ingestVideoQuestions(params: {
       const comment = top?.snippet
       const commentId = typeof top?.id === "string" ? top.id : ""
       const text = typeof comment?.textDisplay === "string" ? comment.textDisplay : ""
+      const publishedAt = typeof comment?.publishedAt === "string" ? comment.publishedAt : ""
       if (!commentId || !text || !isQuestionText(text)) return null
+      if (!publishedAt || !isRecentPublishedAt(publishedAt)) return null
 
       return {
         youtube_video_id: params.youtubeVideoId,
@@ -41,7 +47,7 @@ export async function ingestVideoQuestions(params: {
         author_channel_id: typeof comment?.authorChannelId?.value === "string" ? comment.authorChannelId.value : null,
         text_display: text,
         like_count: typeof comment?.likeCount === "number" ? comment.likeCount : 0,
-        published_at: typeof comment?.publishedAt === "string" ? comment.publishedAt : null,
+        published_at: publishedAt || null,
         fetched_at: new Date().toISOString(),
         is_selected: false,
         is_hidden: false,
