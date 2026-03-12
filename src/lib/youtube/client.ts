@@ -57,6 +57,30 @@ export type FetchPlaylistItemsInput = {
   maxResults?: number
 }
 
+const CommentThread = z.object({
+  id: z.string(),
+  snippet: z.object({
+    videoId: z.string().optional(),
+    topLevelComment: z.object({
+      id: z.string(),
+      snippet: z.object({
+        authorDisplayName: z.string().optional(),
+        authorChannelId: z.object({ value: z.string().optional() }).optional(),
+        textDisplay: z.string().optional(),
+        likeCount: z.number().optional(),
+        publishedAt: z.string().optional(),
+      }),
+    }),
+  }),
+})
+
+const CommentThreadsResponse = z.object({
+  nextPageToken: z.string().optional(),
+  items: z.array(CommentThread),
+})
+
+export type YouTubeCommentThread = z.infer<typeof CommentThread>
+
 export async function fetchPlaylistItems(input: FetchPlaylistItemsInput) {
   const maxResults = input.maxResults ?? 50
   const params = new URLSearchParams({
@@ -81,6 +105,42 @@ export async function fetchPlaylistItems(input: FetchPlaylistItemsInput) {
 
     const json: unknown = await res.json()
     return PlaylistItemsResponse.parse(json)
+  })
+}
+
+export type FetchCommentThreadsInput = {
+  apiKey: string
+  videoId: string
+  pageToken?: string
+  maxResults?: number
+  textFormat?: "plainText" | "html"
+}
+
+export async function fetchCommentThreads(input: FetchCommentThreadsInput) {
+  const maxResults = input.maxResults ?? 100
+  const params = new URLSearchParams({
+    part: "snippet",
+    maxResults: String(Math.min(100, Math.max(1, maxResults))),
+    videoId: input.videoId,
+    textFormat: input.textFormat ?? "plainText",
+    key: input.apiKey,
+  })
+  if (input.pageToken) params.set("pageToken", input.pageToken)
+
+  const url = `https://www.googleapis.com/youtube/v3/commentThreads?${params.toString()}`
+
+  return withBackoff(async () => {
+    const res = await fetch(url, { method: "GET" })
+    if (!res.ok) {
+      const status = res.status
+      const body = await res.text().catch(() => "")
+      const msg = `YouTube API error ${status}${body ? `: ${body}` : ""}`
+      if (status === 429 || status >= 500) throw new RetryableError(msg, status)
+      throw new Error(msg)
+    }
+
+    const json: unknown = await res.json()
+    return CommentThreadsResponse.parse(json)
   })
 }
 

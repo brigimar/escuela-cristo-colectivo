@@ -4,6 +4,7 @@ import { supabaseService } from "@/lib/supabase/client-service"
 import { listUploads } from "@/lib/youtube"
 import { fetchUploadsPlaylistIdForChannel } from "@/lib/youtube/client"
 import { mapPlaylistItemToVideo } from "@/lib/youtube/map"
+import { ingestVideoQuestions } from "@/features/questions/ingest"
 
 const InsertRunResponse = z.object({ id: z.string().uuid() })
 const ExistingVideoIdRow = z.object({ youtube_video_id: z.string().min(1) })
@@ -53,6 +54,10 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
   let fetchedCount = 0
   let insertedCount = 0
   let updatedCount = 0
+  let questionsAttempted = 0
+  let questionsUpserted = 0
+  let questionsFailed = 0
+  const questionsErrors: Array<{ youtube_video_id: string; error: string }> = []
 
   try {
     const env = loadServerEnv()
@@ -130,6 +135,22 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
 
     if (upsertRes.error) throw new Error(upsertRes.error.message)
 
+    for (const youtubeVideoId of ids) {
+      try {
+        const result = await ingestVideoQuestions({
+          apiKey: apiKeyValue,
+          youtubeVideoId,
+          maxPages: 2,
+        })
+        questionsAttempted += result.attempted
+        questionsUpserted += result.insertedOrUpdated
+      } catch (err) {
+        questionsFailed += 1
+        const message = err instanceof Error ? err.message : "Unknown error"
+        questionsErrors.push({ youtube_video_id: youtubeVideoId, error: message })
+      }
+    }
+
     await supabaseService
       .from("sync_runs")
       .update({
@@ -138,7 +159,11 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
           runId,
           fetchedCount: ids.length,
           insertedCount: insertedDelta,
-          updatedCount: updatedDelta
+          updatedCount: updatedDelta,
+          questionsAttempted,
+          questionsUpserted,
+          questionsFailed,
+          questionsErrors
         }
       })
       .eq("id", runId)
@@ -148,7 +173,11 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
       status: "ok",
       fetchedCount: ids.length,
       insertedCount: insertedDelta,
-      updatedCount: updatedDelta
+      updatedCount: updatedDelta,
+      questionsAttempted,
+      questionsUpserted,
+      questionsFailed,
+      questionsErrors
     }
   } catch (err) {
     const missingEnv = readMissingEnv(err)
@@ -162,6 +191,10 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
           fetchedCount,
           insertedCount,
           updatedCount,
+          questionsAttempted,
+          questionsUpserted,
+          questionsFailed,
+          questionsErrors,
           error: message,
           missingEnv
         }
@@ -174,6 +207,10 @@ export async function refreshVideos(): Promise<RefreshVideosResult> {
       fetchedCount,
       insertedCount,
       updatedCount,
+      questionsAttempted,
+      questionsUpserted,
+      questionsFailed,
+      questionsErrors,
       error: message,
       missingEnv
     }

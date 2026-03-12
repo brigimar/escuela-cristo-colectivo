@@ -1,4 +1,4 @@
-import { fetchPlaylistItems } from "./client"
+import { fetchCommentThreads, fetchPlaylistItems, type YouTubeCommentThread } from "./client"
 
 export type ListUploadsInput = {
   apiKey: string
@@ -22,6 +22,32 @@ export async function listUploads(input: ListUploadsInput) {
     if (!res.nextPageToken) break
     pageToken = res.nextPageToken
   }
+
+  return items
+}
+
+export async function fetchCommentThreadsByVideoId(input: {
+  apiKey: string
+  videoId: string
+  maxPages?: number
+  textFormat?: "plainText" | "html"
+}): Promise<YouTubeCommentThread[]> {
+  const maxPages = input.maxPages ?? 2
+  const items: YouTubeCommentThread[] = []
+  let pageToken: string | undefined
+  let page = 0
+
+  do {
+    const res = await fetchCommentThreads({
+      apiKey: input.apiKey,
+      videoId: input.videoId,
+      pageToken,
+      textFormat: input.textFormat ?? "plainText",
+    })
+    items.push(...res.items)
+    pageToken = res.nextPageToken
+    page += 1
+  } while (pageToken && page < maxPages)
 
   return items
 }
