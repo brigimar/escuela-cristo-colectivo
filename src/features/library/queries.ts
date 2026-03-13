@@ -12,6 +12,8 @@ export type LibraryPdf = {
   mime_type: string | null
   size_bytes: number | null
   is_published: boolean
+  is_hidden: boolean
+  is_recommended: boolean
   created_by: string | null
   created_at: string
   updated_by: string | null
@@ -22,8 +24,9 @@ export type LibraryPdfEditField = "title" | "description" | "author"
 
 export type PdfEditorContextPayload = {
   pdf_id: string
-  back_callback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
-  field: LibraryPdfEditField | null
+  list_type: "p" | "h" | "a"
+  list_offset: number
+  field: "title" | "description" | null
 }
 
 function mapLibraryPdf(row: any): LibraryPdf | null {
@@ -42,6 +45,8 @@ function mapLibraryPdf(row: any): LibraryPdf | null {
     mime_type: typeof row?.mime_type === "string" ? row.mime_type : null,
     size_bytes: typeof row?.size_bytes === "number" ? row.size_bytes : null,
     is_published: typeof row?.is_published === "boolean" ? row.is_published : false,
+    is_hidden: typeof row?.is_hidden === "boolean" ? row.is_hidden : false,
+    is_recommended: typeof row?.is_recommended === "boolean" ? row.is_recommended : false,
     created_by: typeof row?.created_by === "string" ? row.created_by : null,
     created_at: typeof row?.created_at === "string" ? row.created_at : "",
     updated_by: typeof row?.updated_by === "string" ? row.updated_by : null,
@@ -52,8 +57,10 @@ function mapLibraryPdf(row: any): LibraryPdf | null {
 export async function listPublishedLibraryPdfs(limit = 20): Promise<LibraryPdf[]> {
   const res = await supabasePublic
     .from("library_pdfs")
-    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, created_by, created_at, updated_by, updated_at")
+    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, is_hidden, is_recommended, created_by, created_at, updated_by, updated_at")
     .eq("is_published", true)
+    .eq("is_hidden", false)
+    .order("is_recommended", { ascending: false })
     .order("created_at", { ascending: false, nullsFirst: false })
     .limit(limit)
 
@@ -84,10 +91,12 @@ export async function listPublishedLibraryPdfsPage(
   let request = supabasePublic
     .from("library_pdfs")
     .select(
-      "id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, created_by, created_at, updated_by, updated_at",
+      "id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, is_hidden, is_recommended, created_by, created_at, updated_by, updated_at",
       { count: "exact" }
     )
     .eq("is_published", true)
+    .eq("is_hidden", false)
+    .order("is_recommended", { ascending: false })
     .order("created_at", { ascending: false, nullsFirst: false })
 
   if (q) {
@@ -105,13 +114,24 @@ export async function listPublishedLibraryPdfsPage(
   }
 }
 
-export async function listLibraryPdfsByVisibility(isPublished: boolean, limit = 20): Promise<LibraryPdf[]> {
-  const res = await supabaseService
+export type LibraryListType = "published" | "hidden" | "all"
+
+export async function listLibraryPdfsForOwner(listType: LibraryListType, limit = 20, offset = 0): Promise<LibraryPdf[]> {
+  const safeOffset = Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0
+  let request = supabaseService
     .from("library_pdfs")
-    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, created_by, created_at, updated_by, updated_at")
-    .eq("is_published", isPublished)
+    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, is_hidden, is_recommended, created_by, created_at, updated_by, updated_at")
+    .order("is_recommended", { ascending: false })
     .order("created_at", { ascending: false, nullsFirst: false })
-    .limit(limit)
+    .range(safeOffset, safeOffset + limit - 1)
+
+  if (listType === "published") {
+    request = request.eq("is_published", true).eq("is_hidden", false)
+  } else if (listType === "hidden") {
+    request = request.eq("is_hidden", true)
+  }
+
+  const res = await request
 
   if (res.error || !Array.isArray(res.data)) return []
   return res.data.map(mapLibraryPdf).filter((row): row is LibraryPdf => Boolean(row))
@@ -120,7 +140,7 @@ export async function listLibraryPdfsByVisibility(isPublished: boolean, limit = 
 export async function getLibraryPdfById(id: string): Promise<LibraryPdf | null> {
   const res = await supabaseService
     .from("library_pdfs")
-    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, created_by, created_at, updated_by, updated_at")
+    .select("id, title, description, author, storage_bucket, storage_path, public_url, mime_type, size_bytes, is_published, is_hidden, is_recommended, created_by, created_at, updated_by, updated_at")
     .eq("id", id)
     .maybeSingle()
 
@@ -151,6 +171,8 @@ export async function createLibraryPdf(input: {
       mime_type: input.mime_type ?? null,
       size_bytes: input.size_bytes ?? null,
       is_published: true,
+      is_hidden: false,
+      is_recommended: false,
       created_by: input.actor,
       updated_by: input.actor,
       updated_at: now,
@@ -159,11 +181,61 @@ export async function createLibraryPdf(input: {
   return !res.error
 }
 
-export async function setLibraryPdfPublished(id: string, isPublished: boolean, actor: string): Promise<boolean> {
+export async function publishLibraryPdf(id: string, actor: string): Promise<boolean> {
   const res = await supabaseService
     .from("library_pdfs")
     .update({
-      is_published: isPublished,
+      is_published: true,
+      is_hidden: false,
+      updated_by: actor,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function hideLibraryPdf(id: string, actor: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("library_pdfs")
+    .update({
+      is_hidden: true,
+      updated_by: actor,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function setLibraryPdfRecommended(id: string, actor: string): Promise<boolean> {
+  const now = new Date().toISOString()
+  const resetRes = await supabaseService
+    .from("library_pdfs")
+    .update({ is_recommended: false, updated_by: actor, updated_at: now })
+    .neq("id", id)
+
+  if (resetRes.error) return false
+
+  const res = await supabaseService
+    .from("library_pdfs")
+    .update({
+      is_recommended: true,
+      is_published: true,
+      is_hidden: false,
+      updated_by: actor,
+      updated_at: now,
+    })
+    .eq("id", id)
+
+  return !res.error
+}
+
+export async function clearLibraryPdfRecommended(id: string, actor: string): Promise<boolean> {
+  const res = await supabaseService
+    .from("library_pdfs")
+    .update({
+      is_recommended: false,
       updated_by: actor,
       updated_at: new Date().toISOString(),
     })
@@ -201,21 +273,14 @@ function parsePdfEditorContext(row: any): PdfEditorContextPayload | null {
   const pdfId = typeof first?.pdf_id === "string" ? first.pdf_id : ""
   if (!pdfId) return null
 
-  const backCallback =
-    first?.back_callback === "owner:pdfs:published" ||
-    first?.back_callback === "owner:pdfs:hidden" ||
-    first?.back_callback === "owner:pdfs"
-      ? first.back_callback
-      : "owner:pdfs"
-
-  const field =
-    first?.field === "title" || first?.field === "description" || first?.field === "author"
-      ? first.field
-      : null
+  const listType = first?.list_type === "p" || first?.list_type === "h" || first?.list_type === "a" ? first.list_type : "a"
+  const listOffset = typeof first?.list_offset === "number" && Number.isFinite(first.list_offset) ? first.list_offset : 0
+  const field = first?.field === "title" || first?.field === "description" ? first.field : null
 
   return {
     pdf_id: pdfId,
-    back_callback: backCallback,
+    list_type: listType,
+    list_offset: listOffset,
     field,
   }
 }

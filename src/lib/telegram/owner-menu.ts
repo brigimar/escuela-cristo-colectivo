@@ -10,10 +10,17 @@ export type InlineKeyboardMarkup = {
 }
 
 type QuestionListType = "pending" | "selected" | "hidden"
+type LibraryListType = "published" | "hidden" | "all"
 
 function encodeQuestionListType(listType: QuestionListType): "p" | "s" | "h" {
   if (listType === "selected") return "s"
   if (listType === "hidden") return "h"
+  return "p"
+}
+
+function encodeLibraryListType(listType: LibraryListType): "p" | "h" | "a" {
+  if (listType === "hidden") return "h"
+  if (listType === "all") return "a"
   return "p"
 }
 
@@ -26,7 +33,7 @@ export const OWNER_MAIN_MENU_BUTTONS: InlineKeyboardMarkup = {
     [{ text: "Publicar audio", callback_data: "owner:audio" }],
     [{ text: "Respuestas publicadas", callback_data: "owner:answers" }],
     [{ text: "Lectura del dia", callback_data: "owner:reading" }],
-    [{ text: "Libros / PDFs", callback_data: "owner:pdfs" }],
+    [{ text: "Biblioteca", callback_data: "owner:lib" }],
     [{ text: "Videos del canal", callback_data: "owner:videos" }],
     [{ text: "Estado del sistema", callback_data: "owner:status" }],
     [{ text: "Ayuda", callback_data: "owner:help" }],
@@ -165,14 +172,14 @@ export function buildOwnerReadingText() {
 
 export function buildOwnerPdfsText() {
   return [
-    "Libros / PDFs",
+    "Biblioteca",
     "",
     "Funciones reales disponibles:",
-    "- ver libros publicados",
-    "- ver libros ocultos",
-    "- subir nuevo PDF",
+    "- ver libros publicados, ocultos y todos",
     "- ver detalle",
-    "- ocultar y restaurar",
+    "- publicar u ocultar",
+    "- editar titulo y descripcion",
+    "- marcar recomendado",
   ].join("\n")
 }
 
@@ -309,10 +316,10 @@ export const OWNER_READING_MENU_BUTTONS: InlineKeyboardMarkup = {
 
 export const OWNER_PDFS_MENU_BUTTONS: InlineKeyboardMarkup = {
   inline_keyboard: [
-    [{ text: "Ver libros publicados", callback_data: "owner:pdfs:published" }],
-    [{ text: "Ver libros ocultos", callback_data: "owner:pdfs:hidden" }],
-    [{ text: "Subir nuevo PDF", callback_data: "owner:pdfs:start" }],
-    [{ text: "Volver", callback_data: "owner:main" }],
+    [{ text: "Ver publicados", callback_data: "owner:lib:list:p:0" }],
+    [{ text: "Ver ocultos", callback_data: "owner:lib:list:h:0" }],
+    [{ text: "Ver todos", callback_data: "owner:lib:list:a:0" }],
+    [{ text: "Menu principal", callback_data: "owner:main" }],
   ],
 }
 
@@ -569,41 +576,55 @@ export function buildOwnerReadingEditorKeyboard(): InlineKeyboardMarkup {
 }
 
 export function buildOwnerPdfListKeyboard(
-  items: Array<{ id: string; title: string }>,
-  backCallback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
+  items: Array<{ id: string; title: string; is_recommended?: boolean | null }>,
+  listType: LibraryListType,
+  params: { offset: number; pageSize: number; hasNext: boolean }
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = items.map((item, index) => [
     {
-      text: `${index + 1}. ${item.title.slice(0, 50)}`,
-      callback_data: `owner:pdfs:detail:${item.id}:${backCallback}`,
+      text: `${index + 1}. ${(item.is_recommended ? "[Rec] " : "")}${item.title.slice(0, 46)}`,
+      callback_data: `owner:lib:detail:${encodeLibraryListType(listType)}:${item.id}:${params.offset}`,
     },
   ])
 
-  rows.push([
-    { text: "Volver", callback_data: backCallback },
-    { text: "Menu principal", callback_data: "owner:main" },
-  ])
+  const navRow: InlineKeyboardButton[] = []
+  if (params.offset > 0) {
+    const prevOffset = Math.max(0, params.offset - params.pageSize)
+    navRow.push({ text: "Anterior", callback_data: `owner:lib:list:${encodeLibraryListType(listType)}:${prevOffset}` })
+  }
+  if (params.hasNext) {
+    const nextOffset = params.offset + params.pageSize
+    navRow.push({ text: "Siguiente", callback_data: `owner:lib:list:${encodeLibraryListType(listType)}:${nextOffset}` })
+  }
+  if (navRow.length) rows.push(navRow)
+
+  rows.push([{ text: "Volver", callback_data: "owner:lib" }])
+  rows.push([{ text: "Menu principal", callback_data: "owner:main" }])
 
   return { inline_keyboard: rows }
 }
 
 export function buildOwnerPdfDetailKeyboard(
   pdfId: string,
-  isPublished: boolean,
-  backCallback: "owner:pdfs:published" | "owner:pdfs:hidden" | "owner:pdfs"
+  state: { isPublished: boolean; isHidden: boolean; isRecommended: boolean },
+  listType: LibraryListType,
+  offset: number
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
-  rows.push([{ text: "Editar titulo", callback_data: `owner:pdfs:edit:title:${pdfId}:${backCallback}` }])
-  rows.push([{ text: "Editar descripcion", callback_data: `owner:pdfs:edit:description:${pdfId}:${backCallback}` }])
-  rows.push([{ text: "Editar autor", callback_data: `owner:pdfs:edit:author:${pdfId}:${backCallback}` }])
+  rows.push([{ text: "Editar titulo", callback_data: `owner:lib:edit:title:${pdfId}` }])
+  rows.push([{ text: "Editar descripcion", callback_data: `owner:lib:edit:desc:${pdfId}` }])
   rows.push([
-    {
-      text: isPublished ? "Ocultar libro" : "Restaurar libro",
-      callback_data: isPublished ? `owner:pdfs:hide:${pdfId}` : `owner:pdfs:restore:${pdfId}`,
-    },
+    state.isHidden || !state.isPublished
+      ? { text: "Publicar", callback_data: `owner:lib:act:pub:${pdfId}:${encodeLibraryListType(listType)}:${offset}` }
+      : { text: "Ocultar", callback_data: `owner:lib:act:hid:${pdfId}:${encodeLibraryListType(listType)}:${offset}` },
   ])
   rows.push([
-    { text: "Volver", callback_data: backCallback },
+    state.isRecommended
+      ? { text: "Quitar recomendado", callback_data: `owner:lib:act:unrec:${pdfId}:${encodeLibraryListType(listType)}:${offset}` }
+      : { text: "Marcar recomendado", callback_data: `owner:lib:act:rec:${pdfId}:${encodeLibraryListType(listType)}:${offset}` },
+  ])
+  rows.push([
+    { text: "Volver", callback_data: `owner:lib:list:${encodeLibraryListType(listType)}:${offset}` },
     { text: "Menu principal", callback_data: "owner:main" },
   ])
   return { inline_keyboard: rows }

@@ -8,7 +8,7 @@ export function PublicFooter() {
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
           <div>
-            <p className="font-semibold">Escuela de Cristo</p>
+            <p className="font-semibold">Escuela del Cristo</p>
             <p className="mt-1 text-sm text-[#bca983]">Contenido del canal oficial · Sitio para lectura y estudio</p>
           </div>
 
