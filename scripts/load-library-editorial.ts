@@ -1,4 +1,4 @@
-import { supabaseService } from "../src/lib/supabase/client-service.ts";
+import { supabaseService } from "../src/lib/supabase/client-service";
 
 const BUCKET = "libros-pdf";
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
