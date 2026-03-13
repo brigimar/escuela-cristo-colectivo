@@ -82,7 +82,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
           </p>
 
           <h1 className="mt-3 max-w-[11ch] text-[1.4rem] font-semibold leading-[1.02] tracking-tight text-black min-[430px]:max-w-[12ch] min-[430px]:text-[2.5rem] sm:mt-4 sm:max-w-[14ch] sm:text-[3.1rem] lg:text-[4rem]">
-            Cristo en nosotros, 
+            Cristo en nosotros,
             <span className="block">la esperanza de gloria</span>
           </h1>
 
@@ -115,7 +115,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
               { k: "Fuente", v: "Canal oficial" },
               { k: "Acceso", v: "Gratis" },
             ].map((x) => (
-              <div key={x.k} className={`${PREMIUM_CARD_BASE_CLASS} p-3.5 sm:p-4`}>
+              <div key={x.k} className={`${PREMIUM_CARD_BASE_CLASS} rounded-lg p-3.5 sm:p-4`}>
                 <p className="text-xs text-black/60 sm:text-sm">{x.k}</p>
                 <p className="mt-1 text-sm font-medium text-black sm:text-base">{x.v}</p>
               </div>
@@ -125,7 +125,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
 
         <aside className="order-2 w-full pt-1 sm:pt-2 lg:col-span-6 lg:pt-0">
           <div className="relative mx-0 w-full max-w-none sm:mx-auto sm:max-w-[38rem] lg:max-w-none">
-            <div className={`relative overflow-hidden p-3 sm:p-4 lg:p-5 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`}>
+            <div className={`relative overflow-hidden rounded-lg p-3 sm:p-4 lg:p-5 ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-xs text-black/60 sm:text-sm">Encuentro</p>
@@ -139,7 +139,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                   </p>
                 </div>
 
-                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0dfb9] text-[#6e5421] sm:h-10 sm:w-10">
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#f0dfb9] text-[#6e5421] sm:h-10 sm:w-10">
                   <Icon
                     name={isLive ? "radio" : "youtube"}
                     className="h-4 w-4 fill-current sm:h-5 sm:w-5"
@@ -150,7 +150,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
               <div className="mt-3.5 space-y-3">
                 {isLive ? (
                   <>
-                    <div className="aspect-[16/9.6] overflow-hidden rounded-2xl bg-black shadow-inner sm:aspect-[16/9.2] lg:aspect-[16/8.1]">
+                    <div className="aspect-[16/9.6] overflow-hidden rounded-lg bg-black shadow-inner sm:aspect-[16/9.2] lg:aspect-[16/8.1]">
                       {liveSrc ? (
                         <iframe
                           src={liveSrc}
@@ -169,7 +169,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                     </div>
 
                     <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <span className="inline-flex w-fit items-center gap-1 rounded bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-tight text-white">
+                      <span className="inline-flex w-fit items-center gap-1 rounded-sm bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-tight text-white">
                         <Icon name="radio" className="h-3 w-3 fill-current" />
                         Transmitiendo
                       </span>
@@ -182,7 +182,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                   <>
                     <Link
                       href={latestHref}
-                      className="relative block aspect-[16/9.6] overflow-hidden rounded-2xl ring-1 ring-black/10 sm:aspect-[16/9.2] lg:aspect-[16/8.1]"
+                      className="relative block aspect-[16/9.6] overflow-hidden rounded-lg ring-1 ring-black/10 sm:aspect-[16/9.2] lg:aspect-[16/8.1]"
                       aria-label={`Abrir: ${videoTitle}`}
                     >
                       <img
@@ -192,7 +192,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
                         loading="lazy"
                       />
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <span className="rounded-full bg-[linear-gradient(180deg,#e6c24a_0%,#d5ad2f_100%)] p-3 text-[#1f1b16] shadow-lg sm:p-4">
+                        <span className="rounded-md bg-[linear-gradient(180deg,#e6c24a_0%,#d5ad2f_100%)] p-3 text-[#1f1b16] shadow-lg sm:p-4">
                           <Icon name="play" className="h-5 w-5 fill-current sm:h-6 sm:w-6" />
                         </span>
                       </div>
@@ -216,5 +216,3 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
     </section>
   );
 }
-
-

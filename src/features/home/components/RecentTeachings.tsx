@@ -129,12 +129,12 @@ export function RecentTeachings({
                 <Link
                   href={`/videos/${v.slug}`}
                   className={[
-                    `relative flex h-full flex-col overflow-hidden ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`,
+                    `relative flex h-full flex-col overflow-hidden rounded-lg ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`,
                     "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a95a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f1e4]"
                   ].join(" ")}
                 >
                   <div className="p-3">
-                    <div className="relative overflow-hidden rounded-2xl bg-[#f1e5cf]">
+                    <div className="relative overflow-hidden rounded-md bg-[#f1e5cf]">
                       <div className="relative aspect-video w-full">
                         <Image
                           src={thumb}
@@ -155,13 +155,13 @@ export function RecentTeachings({
 
                       <div className="absolute right-3 top-3 flex max-w-[72%] flex-wrap justify-end gap-1.5">
                         {showLiveBadge ? (
-                          <span className="inline-flex items-center rounded-md bg-[#b5261a] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-sm bg-[#b5261a] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                             Live
                           </span>
                         ) : null}
 
                         {showNewBadge ? (
-                          <span className="inline-flex items-center rounded-md bg-[#687c48] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-sm bg-[#687c48] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
                             Nuevo
                           </span>
                         ) : null}
