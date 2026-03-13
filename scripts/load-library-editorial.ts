@@ -8,7 +8,7 @@ async function loadEditorial() {
 
   // 1. Fetch current records to avoid duplicates
   const { data: currentRecords } = await supabaseService.from("library_pdfs").select("*");
-  const { data: files } = await supabaseService.storage.from(BUCKET).list("", { recursive: true });
+  const { data: files } = await supabaseService.storage.from(BUCKET).list("");
 
   if (!files) {
     console.error("No files found in bucket.");
