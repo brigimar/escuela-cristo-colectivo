@@ -33,6 +33,18 @@ export function premiumChipClass(tone: "warm" | "neutral" | "ink" = "neutral") {
 }
 
 export function Icon({ name, className }: { name: string; className?: string }) {
+  if (name === "cross") {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        className={cn("inline-block align-middle fill-current", className)}
+        aria-hidden="true"
+      >
+        <path d="M10.5 3h3v5.5H19v3h-5.5V21h-3v-9.5H5v-3h5.5V3z" />
+      </svg>
+    );
+  }
+
   return (
     <span className={cn("material-symbols-rounded align-middle leading-none", className)} aria-hidden="true">
       {name}
@@ -111,10 +123,10 @@ export function SectionHeader({
 export function Surface({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-        className={cn(
-          PREMIUM_CARD_BASE_CLASS,
-          className
-        )}
+      className={cn(
+        PREMIUM_CARD_BASE_CLASS,
+        className
+      )}
     >
       {children}
     </div>

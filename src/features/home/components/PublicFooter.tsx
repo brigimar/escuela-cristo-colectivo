@@ -23,10 +23,10 @@ export function PublicFooter() {
         </div>
 
         <div className="mt-8 flex flex-col items-start justify-between gap-4 text-sm text-[#b6a27c] md:flex-row md:items-center">
-          <p>© {year} Escuela de Cristo. Todos los derechos reservados.</p>
+          <p>© {year} Escuela del Cristo. Todos los derechos reservados.</p>
           <p className="inline-flex items-center gap-2">
-            <Icon name="security" className="text-[18px]" />
-            Videos reales desde Supabase
+            <Icon name="cross" className="h-[18px] w-[18px]" />
+            Enseñanzas Cristocéntricas
           </p>
         </div>
       </div>

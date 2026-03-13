@@ -87,22 +87,22 @@ export function RecentTeachings({
   return (
     <section
       aria-labelledby="recent-teachings"
-      className="bg-[#f8f1e4] py-14 sm:py-20"
+      className="bg-[#1f1b16] py-14 sm:py-20"
     >
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8e6e2f]">
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[#eebd2b]">
             Lo más reciente
           </div>
 
           <h2
             id="recent-teachings"
-            className="mt-3 text-3xl font-semibold tracking-tight text-[#1f1b16] sm:text-4xl"
+            className="mt-3 text-3xl font-semibold tracking-tight text-[#f2e6cf] sm:text-4xl"
           >
             {title}
           </h2>
 
-          <p className="mt-3 text-base text-[#5a4c34] sm:text-lg">
+          <p className="mt-3 text-base text-[#bca983] sm:text-lg">
             {subtitle}
           </p>
         </div>
@@ -129,45 +129,46 @@ export function RecentTeachings({
                 <Link
                   href={`/videos/${v.slug}`}
                   className={[
-                    `relative flex h-full flex-col overflow-hidden rounded-lg ${PREMIUM_CARD_BASE_CLASS} ${PREMIUM_CARD_INTERACTIVE_CLASS}`,
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a95a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f8f1e4]"
+                    "relative flex h-full flex-col overflow-hidden rounded-lg border border-[#3d3321] bg-[#2a241d] shadow-[0_12px_32px_rgba(0,0,0,0.24)]",
+                    "transition-all duration-300 hover:-translate-y-1 hover:border-[#4d412b] hover:shadow-[0_20px_48px_rgba(0,0,0,0.32)]",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[#eebd2b] focus-visible:ring-offset-2 focus-visible:ring-offset-[#1f1b16]"
                   ].join(" ")}
                 >
                   <div className="p-3">
-                    <div className="relative overflow-hidden rounded-md bg-[#f1e5cf]">
+                    <div className="relative overflow-hidden rounded-md bg-[#1a1611]">
                       <div className="relative aspect-video w-full">
                         <Image
                           src={thumb}
                           alt={v.title}
                           fill
                           sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                          className="object-cover transition-transform duration-300 ease-out group-hover:scale-[1.03]"
+                          className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
                           priority={false}
                         />
                       </div>
 
-                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#120f0c]/30 via-transparent to-transparent" />
+                      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#120f0c]/60 via-transparent to-transparent" />
 
-                      <div className={`absolute left-3 top-3 inline-flex items-center gap-2 shadow-sm ${premiumChipClass("warm")}`}>
-                        <IconPlay className="h-4 w-4" />
+                      <div className="absolute left-3 top-3 inline-flex items-center gap-2 rounded-md border border-white/10 bg-black/40 px-3 py-1 text-[11px] font-medium text-white backdrop-blur-md shadow-sm">
+                        <IconPlay className="h-4 w-4 fill-white/20" />
                         Ver
                       </div>
 
                       <div className="absolute right-3 top-3 flex max-w-[72%] flex-wrap justify-end gap-1.5">
                         {showLiveBadge ? (
-                          <span className="inline-flex items-center rounded-sm bg-[#b5261a] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-sm bg-[#d93025] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
                             Live
                           </span>
                         ) : null}
 
                         {showNewBadge ? (
-                          <span className="inline-flex items-center rounded-sm bg-[#687c48] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
+                          <span className="inline-flex items-center rounded-sm bg-[#eebd2b] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#1f1b16] shadow-sm">
                             Nuevo
                           </span>
                         ) : null}
 
                         {v.category_name ? (
-                          <span className={premiumChipClass("ink")}>
+                          <span className="inline-flex items-center rounded-sm border border-white/10 bg-white/10 px-2.5 py-0.5 text-[10px] font-medium text-white backdrop-blur-md">
                             {v.category_name}
                           </span>
                         ) : null}
@@ -175,19 +176,19 @@ export function RecentTeachings({
                     </div>
                   </div>
 
-                  <div className="flex flex-1 flex-col justify-between overflow-hidden px-4 pb-4 pt-2">
-                    <h3 className="min-w-0 text-sm font-semibold leading-5 text-[#1f1a12] line-clamp-2 break-words">
+                  <div className="flex flex-1 flex-col justify-between overflow-hidden px-5 pb-5 pt-1">
+                    <h3 className="min-w-0 text-sm font-semibold leading-relaxed text-[#f2e6cf] line-clamp-2 break-words group-hover:text-[#eebd2b] transition-colors duration-200">
                       {v.title}
                     </h3>
 
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="min-w-0 truncate text-xs text-[#6d5a3f]">
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/5 pt-3">
+                      <div className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-[#bca983]">
                         {dateLabel ? dateLabel : "—"}
                       </div>
 
-                      <div className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-[#6d5318]">
+                      <div className="inline-flex shrink-0 items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-[#eebd2b]">
                         Ver
-                        <IconArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                        <IconArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1" />
                       </div>
                     </div>
                   </div>
@@ -197,12 +198,12 @@ export function RecentTeachings({
           })}
         </div>
 
-        <div className="mt-10 flex justify-center">
+        <div className="mt-12 flex justify-center">
           <Link
             href={ctaHref}
             className={[
               PRIMARY_BUTTON_CLASS,
-              "focus-visible:ring-offset-[#f8f1e4]"
+              "focus-visible:ring-offset-[#1f1b16]"
             ].join(" ")}
           >
             <IconPlay className="h-5 w-5" />
