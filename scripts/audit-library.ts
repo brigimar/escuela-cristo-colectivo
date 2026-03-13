@@ -28,7 +28,7 @@ async function audit() {
   const { data: files, error: storageError } = await supabaseService
     .storage
     .from("libros-pdf")
-    .list("", { recursive: true });
+    .list("");
 
   if (storageError) {
     console.error("Error listing storage files:", storageError);
