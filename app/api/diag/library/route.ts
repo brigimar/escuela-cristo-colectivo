@@ -1,11 +1,11 @@
-import { supabaseAdmin } from "@/lib/supabase/client-service";
+import { supabaseService } from "@/lib/supabase/client-service";
 import { NextResponse } from "next/server";
 
 export const revalidate = 0;
 
 export async function GET() {
   try {
-    const { data: allBooks, error } = await supabaseAdmin
+    const { data: allBooks, error } = await supabaseService
       .from("library_pdfs")
       .select(
         "id, title, author, is_published, is_hidden, is_recommended, storage_bucket, storage_path, public_url, created_at"

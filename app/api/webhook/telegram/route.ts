@@ -1,4 +1,4 @@
-import { revalidatePath } from "next/cache"
+﻿import { revalidatePath } from "next/cache"
 import { loadServerEnv } from "@/lib/env/server"
 import { getVideoRecommendation, setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
 import {
@@ -204,7 +204,7 @@ async function sendOrEditTelegramMessage(
 }
 
 function formatTelegramDate(value: string | null) {
-  return value ? value.slice(0, 10) : "—"
+  return value ? value.slice(0, 10) : "â€”"
 }
 
 function buildVideoListText(title: string, videos: Array<{ title: string; published_at: string | null; youtube_video_id: string }>) {
@@ -263,7 +263,7 @@ async function loadQuestionsPage(
 
 function buildAnswerListText(title: string, answers: Array<{ title: string; created_at: string; created_by: string | null }>) {
   return `${title}\n\n${answers
-    .map((answer, index) => `${index + 1}. ${answer.title}\n${formatTelegramDate(answer.created_at)}\n${answer.created_by || "—"}`)
+    .map((answer, index) => `${index + 1}. ${answer.title}\n${formatTelegramDate(answer.created_at)}\n${answer.created_by || "â€”"}`)
     .join("\n\n")}`
 }
 
@@ -274,7 +274,7 @@ function buildLibraryListText(
   return `${title}\n\n${items
     .map(
       (item, index) =>
-        `${index + 1}. ${item.is_recommended ? "[Rec] " : ""}${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "—"}`
+        `${index + 1}. ${item.is_recommended ? "[Rec] " : ""}${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "â€”"}`
     )
     .join("\n\n")}`
 }
@@ -289,8 +289,8 @@ async function loadLibraryPage(listType: LibraryListType, offset: number) {
 }
 function trimForTelegram(value: string | null | undefined, max = 800) {
   const text = (value || "").trim()
-  if (!text) return "—"
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+  if (!text) return "â€”"
+  return text.length > max ? `${text.slice(0, max - 1)}â€¦` : text
 }
 
 type LibraryListType = "published" | "hidden" | "all"
@@ -394,12 +394,12 @@ async function renderPdfDetail(params: {
       "Detalle de libro / PDF",
       "",
       `Titulo: ${item.title}`,
-      `Autor: ${item.author || "—"}`,
-      `Descripcion: ${item.description || "—"}`,
+      `Autor: ${item.author || "â€”"}`,
+      `Descripcion: ${item.description || "â€”"}`,
       `Estado: ${statusLabel}`,
       `Recomendado: ${item.is_recommended ? "Si" : "No"}`,
       `Fecha: ${formatTelegramDate(item.created_at)}`,
-      `URL publica: ${item.public_url || "—"}`,
+      `URL publica: ${item.public_url || "â€”"}`,
     ].join("\n"),
     replyMarkup: buildOwnerPdfDetailKeyboard(
       item.id,
@@ -698,7 +698,7 @@ export async function POST(req: Request) {
     if (callbackData === "owner:recommend:current") {
       const current = await getVideoRecommendation()
       const textCurrent = current
-        ? `Recomendado actual\n\n${current.title || "Sin titulo"}\n${current.published_at ? formatTelegramDate(current.published_at) : "—"}\nID: ${current.youtube_video_id || "—"}`
+        ? `Recomendado actual\n\n${current.title || "Sin titulo"}\n${current.published_at ? formatTelegramDate(current.published_at) : "â€”"}\nID: ${current.youtube_video_id || "â€”"}`
         : "No hay un recomendado actual publicado."
 
       await sendOrEditTelegramMessage({
@@ -786,10 +786,10 @@ export async function POST(req: Request) {
           "",
           `Titulo: ${answer.title}`,
           `Fecha: ${formatTelegramDate(answer.created_at)}`,
-          `Creado por: ${answer.created_by || "—"}`,
-          `Mime: ${answer.mime_type || "—"}`,
-          `Bytes: ${typeof answer.size_bytes === "number" ? answer.size_bytes : "—"}`,
-          `URL publica: ${answer.public_url || "—"}`,
+          `Creado por: ${answer.created_by || "â€”"}`,
+          `Mime: ${answer.mime_type || "â€”"}`,
+          `Bytes: ${typeof answer.size_bytes === "number" ? answer.size_bytes : "â€”"}`,
+          `URL publica: ${answer.public_url || "â€”"}`,
         ].join("\n"),
         replyMarkup: buildOwnerAnswerDetailKeyboard(answer.id, "owner:answers"),
       })
@@ -846,8 +846,8 @@ export async function POST(req: Request) {
             "",
             trimForTelegram(reading.content_md, 900),
             "",
-            `Referencia: ${reading.reference_text || "—"}`,
-            `Autor: ${reading.author || "—"}`,
+            `Referencia: ${reading.reference_text || "â€”"}`,
+            `Autor: ${reading.author || "â€”"}`,
             `Actualizada: ${formatTelegramDate(reading.updated_at)}`,
           ].join("\n")
         : "No hay una lectura publicada actualmente."
@@ -987,7 +987,7 @@ export async function POST(req: Request) {
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: `Lectura publicada ✅\n\n${editor.draft.title}`,
+        text: `Lectura publicada âœ…\n\n${editor.draft.title}`,
         replyMarkup: OWNER_READING_MENU_BUTTONS,
       })
       return new Response("ok")
@@ -1285,9 +1285,9 @@ export async function POST(req: Request) {
           `Estado: ${stateLabel}`,
           `Autor: ${question.author_name || "Anonimo"}`,
           `Fecha: ${formatTelegramDate(question.published_at || null)}`,
-          `Comment ID: ${question.comment_id || "�"}`,
-          `Video ID: ${question.youtube_video_id || "�"}`,
-          `Likes: ${typeof question.like_count === "number" ? question.like_count : "�"}`,
+          `Comment ID: ${question.comment_id || "—"}`,
+          `Video ID: ${question.youtube_video_id || "—"}`,
+          `Likes: ${typeof question.like_count === "number" ? question.like_count : "—"}`,
           "",
           question.text_display || "Sin texto",
         ].join("\n"),
@@ -1665,7 +1665,7 @@ export async function POST(req: Request) {
           detail.title,
           formatTelegramDate(detail.published_at),
           `ID: ${detail.youtube_video_id}`,
-          `Slug: ${detail.slug || "�"}`,
+          `Slug: ${detail.slug || "—"}`,
         ].join("\n"),
         replyMarkup: buildOwnerVideoDetailKeyboard(detail.youtube_video_id, "owner:videos"),
       })
@@ -1918,19 +1918,19 @@ export async function POST(req: Request) {
       ])
 
       if (hasVideoSearchPrompt) {
-        // Hay prompt activo: dejar que el flujo de b�squeda procese este texto.
+        // Hay prompt activo: dejar que el flujo de búsqueda procese este texto.
       } else if (hasAudioSearchPromptActive) {
-        // Hay prompt activo: dejar que el flujo de b�squeda de respuestas procese este texto.
+        // Hay prompt activo: dejar que el flujo de búsqueda de respuestas procese este texto.
       } else if (audioEditTitlePromptId) {
-        // Hay prompt activo: dejar que la edici�n de t�tulo procese este texto.
+        // Hay prompt activo: dejar que la edición de título procese este texto.
       } else if (readingEditor?.field) {
-        // Hay prompt activo: dejar que la edici�n de lectura procese este texto.
+        // Hay prompt activo: dejar que la edición de lectura procese este texto.
       } else if (!pendingPdfPrompt.error && pendingPdfPrompt.data?.awaiting_field) {
-        // Hay prompt activo: dejar que la edici�n de borrador PDF procese este texto.
+        // Hay prompt activo: dejar que la edición de borrador PDF procese este texto.
       } else if (pdfEditor?.field) {
-        // Hay prompt activo: dejar que la edici�n de PDF publicado procese este texto.
+        // Hay prompt activo: dejar que la edición de PDF publicado procese este texto.
       } else if (!pendingForTitle.error && pendingForTitle.data) {
-        // Hay pending activo: dejar que el flujo de publicaci�n procese este texto como t�tulo.
+        // Hay pending activo: dejar que el flujo de publicación procese este texto como título.
       } else {
         await sendTelegramMessage(chatId, "Recibido ?")
         return new Response("ok")
@@ -1981,7 +1981,7 @@ export async function POST(req: Request) {
     const sizeBytes = typeof document.file_size === "number" ? Number(document.file_size) : null
 
     if (!fileId || mimeType !== "application/pdf") {
-      await sendTelegramMessage(chatId, "Solo puedo recibir archivos PDF v�lidos.", OWNER_PDF_AWAITING_FILE_BUTTONS)
+      await sendTelegramMessage(chatId, "Solo puedo recibir archivos PDF válidos.", OWNER_PDF_AWAITING_FILE_BUTTONS)
       return new Response("ok")
     }
 
@@ -2012,22 +2012,22 @@ export async function POST(req: Request) {
       .limit(5)
 
     if (recent.error || !recent.data || recent.data.length === 0) {
-      await sendTelegramMessage(chatId, "No hay audios publicados todav�a.")
+      await sendTelegramMessage(chatId, "No hay audios publicados todavía.")
       return new Response("ok")
     }
 
     const lines = recent.data.map((r: any) => {
-      const title = typeof r?.title === "string" ? r.title : "Sin t�tulo"
-      const date = typeof r?.created_at === "string" ? r.created_at.slice(0, 10) : "�"
+      const title = typeof r?.title === "string" ? r.title : "Sin título"
+      const date = typeof r?.created_at === "string" ? r.created_at.slice(0, 10) : "—"
       return `- ${title} (${date})`
     })
-    await sendTelegramMessage(chatId, `�ltimos audios:\n${lines.join("\n")}`)
+    await sendTelegramMessage(chatId, `Últimos audios:\n${lines.join("\n")}`)
     return new Response("ok")
   }
 
   if (text.startsWith("/menu")) {
     await clearOwnerTransientState(chatId, fromId)
-    await sendTelegramMessage(chatId, "Actualizando men��", { remove_keyboard: true })
+    await sendTelegramMessage(chatId, "Actualizando menú…", { remove_keyboard: true })
     await sendTelegramMessage(chatId, buildOwnerMainMenuText(), OWNER_MAIN_MENU_BUTTONS)
     return new Response("ok")
   }
@@ -2043,7 +2043,7 @@ export async function POST(req: Request) {
       "7. reflexiones",
       "8. ensenanzas",
     ]
-    await sendTelegramMessage(chatId, `Categor�as disponibles:\n${lines.join("\n")}`)
+    await sendTelegramMessage(chatId, `Categorías disponibles:\n${lines.join("\n")}`)
     return new Response("ok")
   }
 
@@ -2066,7 +2066,7 @@ export async function POST(req: Request) {
 
     const videos = await listVideosByTelegramEditorialCategory(category.slug, offset, 10)
     if (videos.length === 0) {
-      await sendTelegramMessage(chatId, `No encontr� videos para ${category.label}.`)
+      await sendTelegramMessage(chatId, `No encontré videos para ${category.label}.`)
       return new Response("ok")
     }
 
@@ -2081,7 +2081,7 @@ export async function POST(req: Request) {
 
     if (lines[lines.length - 1] === "") lines.pop()
 
-    await sendTelegramMessage(chatId, `Categor�a: ${category.label}\n${lines.join("\n")}`)
+    await sendTelegramMessage(chatId, `Categoría: ${category.label}\n${lines.join("\n")}`)
     return new Response("ok")
   }
 
@@ -2091,7 +2091,7 @@ export async function POST(req: Request) {
     const itemNumber = Number(rawNumber)
 
     if (!Number.isInteger(itemNumber) || itemNumber <= 0) {
-      await sendTelegramMessage(chatId, "N�mero inv�lido. Elige uno de la �ltima lista mostrada.")
+      await sendTelegramMessage(chatId, "Número inválido. Elige uno de la última lista mostrada.")
       return new Response("ok")
     }
 
@@ -2103,7 +2103,7 @@ export async function POST(req: Request) {
 
     const selected = context.items.find((item) => item.index === itemNumber)
     if (!selected) {
-      await sendTelegramMessage(chatId, "N�mero inv�lido. Elige uno de la �ltima lista mostrada.")
+      await sendTelegramMessage(chatId, "Número inválido. Elige uno de la última lista mostrada.")
       return new Response("ok")
     }
 
@@ -2111,7 +2111,7 @@ export async function POST(req: Request) {
     const result = await setVideoRecommendationByYoutubeId(selected.youtube_video_id, setBy)
 
     if (!result.ok && result.reason === "not_found_in_videos") {
-      await sendTelegramMessage(chatId, "No encontr� ese video en la base. Primero debe estar sincronizado.")
+      await sendTelegramMessage(chatId, "No encontré ese video en la base. Primero debe estar sincronizado.")
       return new Response("ok")
     }
 
@@ -2140,7 +2140,7 @@ export async function POST(req: Request) {
     const result = await setVideoRecommendationByYoutubeId(youtubeVideoId, setBy)
 
     if (!result.ok && result.reason === "not_found_in_videos") {
-      await sendTelegramMessage(chatId, "No encontr� ese video en la base. Primero debe estar sincronizado.")
+      await sendTelegramMessage(chatId, "No encontré ese video en la base. Primero debe estar sincronizado.")
       return new Response("ok")
     }
 
@@ -2159,7 +2159,7 @@ export async function POST(req: Request) {
   if (!pending.error && pending.data) {
     const title = text.trim()
     if (!title) {
-      await sendTelegramMessage(chatId, "Enviame un t�tulo v�lido para publicar el audio.")
+      await sendTelegramMessage(chatId, "Enviame un título válido para publicar el audio.")
       return new Response("ok")
     }
 
@@ -2170,7 +2170,7 @@ export async function POST(req: Request) {
       .eq("from_id", fromId)
 
     if (titleUpdate.error) {
-      await sendTelegramMessage(chatId, "No pude guardar el t�tulo del audio.")
+      await sendTelegramMessage(chatId, "No pude guardar el título del audio.")
       return new Response("ok")
     }
 
@@ -2246,7 +2246,7 @@ export async function POST(req: Request) {
     const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
     const ok = await updateLibraryPdfMetadata(item.id, pdfEditor.field, normalized, actor)
     if (!ok) {
-      const errorText = pdfEditor.field === "title" ? "El titulo no puede quedar vac�o." : "No pude actualizar el campo."
+      const errorText = pdfEditor.field === "title" ? "El titulo no puede quedar vacío." : "No pude actualizar el campo."
       await sendTelegramMessage(
         chatId,
         errorText,
@@ -2261,7 +2261,7 @@ export async function POST(req: Request) {
     }
 
     await savePdfEditorContext(chatId, fromId, { ...pdfEditor, field: null })
-    await sendTelegramMessage(chatId, "Campo actualizado ✅")
+    await sendTelegramMessage(chatId, "Campo actualizado âœ…")
     await renderPdfDetail({
       chatId,
       pdfId: item.id,
@@ -2349,5 +2349,6 @@ export async function POST(req: Request) {
 
   return new Response("ok")
 }
+
 
 
