@@ -1,4 +1,4 @@
-import { supabaseService } from "../src/lib/supabase/client-service.ts";
+import { supabaseService } from "../src/lib/supabase/client-service";
 
 async function audit() {
   console.log("--- AUDIT: public.library_pdfs ---");
