@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900" role="img" aria-label="Portada de biblioteca">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4ead8"/>
+      <stop offset="100%" stop-color="#d3bb92"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#bg)"/>
+  <rect x="38" y="38" width="524" height="824" fill="none" stroke="#6c5737" stroke-width="3" opacity="0.5"/>
+  <text x="300" y="388" text-anchor="middle" font-size="34" fill="#2d2316" font-family="Georgia, serif">Escuela de Cristo</text>
+  <text x="300" y="442" text-anchor="middle" font-size="52" fill="#2d2316" font-family="Georgia, serif">Biblioteca</text>
+  <text x="300" y="720" text-anchor="middle" font-size="22" letter-spacing="4" fill="#6c5737" font-family="Arial, sans-serif">LECTURA Y DESCARGA</text>
+</svg>

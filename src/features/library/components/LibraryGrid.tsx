@@ -1,15 +1,15 @@
-import { LibraryCard } from "@/features/library/components/LibraryCard"
-import type { LibraryCardModel } from "@/features/library/view-models"
+import { LibraryBookCard } from "@/features/library/components/LibraryBookCard"
+import type { LibraryBook } from "@/features/library/models"
 
 type LibraryGridProps = {
-  items: LibraryCardModel[]
+  books: LibraryBook[]
 }
 
-export function LibraryGrid({ items }: LibraryGridProps) {
+export function LibraryGrid({ books }: LibraryGridProps) {
   return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-      {items.map((item) => (
-        <LibraryCard key={item.id} item={item} />
+    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {books.map((book) => (
+        <LibraryBookCard key={book.id} book={book} />
       ))}
     </div>
   )

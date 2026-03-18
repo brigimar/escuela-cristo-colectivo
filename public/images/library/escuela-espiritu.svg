@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900" role="img" aria-label="La Escuela del Espiritu">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f4e9d6"/>
+      <stop offset="100%" stop-color="#d0ba93"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="900" fill="url(#g)"/>
+  <rect x="42" y="42" width="516" height="816" fill="none" stroke="#71593a" stroke-width="3" opacity="0.55"/>
+  <text x="300" y="390" text-anchor="middle" font-size="44" fill="#2e2416" font-family="Georgia, serif">La Escuela</text>
+  <text x="300" y="448" text-anchor="middle" font-size="44" fill="#2e2416" font-family="Georgia, serif">del Espiritu</text>
+  <text x="300" y="730" text-anchor="middle" font-size="23" letter-spacing="4" fill="#71593a" font-family="Arial, sans-serif">ESCUELA DE CRISTO</text>
+</svg>

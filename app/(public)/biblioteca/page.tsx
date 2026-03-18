@@ -1,8 +1,7 @@
-import Link from "next/link"
 import type { Metadata } from "next"
-import { listPublishedLibraryPdfsPage } from "@/features/library/queries"
-import { toLibraryCardModel } from "@/features/library/view-models"
+import { getLibraryBooks } from "@/features/library/data"
 import { LibraryHero } from "@/features/library/components/LibraryHero"
+import { LibraryFilters } from "@/features/library/components/LibraryFilters"
 import { LibraryGrid } from "@/features/library/components/LibraryGrid"
 import { LibraryEmptyState } from "@/features/library/components/LibraryEmptyState"
 
@@ -13,77 +12,58 @@ export const metadata: Metadata = {
 
 type BibliotecaPageProps = {
   searchParams?: {
-    q?: string
-    page?: string
+    title?: string
+    author?: string
+    category?: string
   }
 }
 
-const PAGE_SIZE = 12
-
-function parsePage(raw: string | undefined) {
-  const page = Number(raw || "1")
-  return Number.isFinite(page) && page > 0 ? Math.floor(page) : 1
+function cleanParam(value: string | undefined): string {
+  return (value || "").trim()
 }
 
-function buildHref(page: number, q: string) {
-  const params = new URLSearchParams()
-  if (q) params.set("q", q)
-  if (page > 1) params.set("page", String(page))
-  const query = params.toString()
-  return query ? `/biblioteca?${query}` : "/biblioteca"
+function normalize(value: string): string {
+  return value.toLocaleLowerCase("es-AR")
 }
 
 export default async function BibliotecaPage({ searchParams }: BibliotecaPageProps) {
-  const q = (searchParams?.q || "").trim()
-  const page = parsePage(searchParams?.page)
-  const result = await listPublishedLibraryPdfsPage({ page, pageSize: PAGE_SIZE, query: q })
-  const cards = result.items.map(toLibraryCardModel)
-  const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE))
-  const canPrev = page > 1
-  const canNext = page < totalPages
+  const selectedCategory = cleanParam(searchParams?.category)
+  const selectedAuthor = cleanParam(searchParams?.author)
+  const searchTitle = cleanParam(searchParams?.title)
+  const titleQuery = normalize(searchTitle)
+
+  const books = await getLibraryBooks()
+  const categories = [...new Set(books.map((book) => book.category))].sort((a, b) => a.localeCompare(b, "es"))
+  const authors = [...new Set(books.map((book) => book.author))].sort((a, b) => a.localeCompare(b, "es"))
+
+  const filteredBooks = books.filter((book) => {
+    if (selectedCategory && book.category !== selectedCategory) return false
+    if (selectedAuthor && book.author !== selectedAuthor) return false
+    if (titleQuery && !normalize(book.title).includes(titleQuery)) return false
+    return true
+  })
 
   return (
     <main className="min-h-screen bg-[#f7f1e4]">
-      <LibraryHero totalBooks={result.total} />
+      <LibraryHero totalBooks={books.length} />
 
       <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-        <form method="GET" action="/biblioteca" className="mb-8 flex flex-col gap-3 sm:flex-row">
-          <input
-            type="search"
-            name="q"
-            defaultValue={q}
-            placeholder="Buscar por título o autor"
-            className="w-full rounded-xl border border-[#cdb58d] bg-[#fffaf0] px-4 py-3 text-sm text-[#2b2114] outline-none transition-colors placeholder:text-[#7a6648] focus:border-[#866a44]"
+        <LibraryFilters
+          categories={categories}
+          authors={authors}
+          selectedCategory={selectedCategory}
+          selectedAuthor={selectedAuthor}
+          searchTitle={searchTitle}
+        />
+
+        {filteredBooks.length === 0 ? (
+          <LibraryEmptyState
+            title="Sin coincidencias"
+            description="No encontramos libros con esos filtros. Proba con otra categoria, autor o titulo."
           />
-          <button
-            type="submit"
-            className="inline-flex items-center justify-center rounded-xl bg-[#2f2314] px-5 py-3 text-sm font-medium text-[#f8efdc] transition-colors hover:bg-[#22180e]"
-          >
-            Buscar
-          </button>
-        </form>
-
-        {cards.length === 0 ? <LibraryEmptyState /> : <LibraryGrid items={cards} />}
-
-        <div className="mt-8 flex items-center justify-between">
-          <Link
-            href={canPrev ? buildHref(page - 1, q) : "#"}
-            aria-disabled={!canPrev}
-            className={`rounded-xl border px-4 py-2 text-sm ${canPrev ? "border-[#cdb58d] bg-[#fffaf0] text-[#2b2114] hover:bg-[#f3e7d1]" : "border-[#dfd1b8] bg-[#f5ecdd] text-[#a28b67] pointer-events-none"}`}
-          >
-            Anterior
-          </Link>
-          <p className="text-sm text-[#5b4b35]">
-            Página {Math.min(page, totalPages)} de {totalPages}
-          </p>
-          <Link
-            href={canNext ? buildHref(page + 1, q) : "#"}
-            aria-disabled={!canNext}
-            className={`rounded-xl border px-4 py-2 text-sm ${canNext ? "border-[#cdb58d] bg-[#fffaf0] text-[#2b2114] hover:bg-[#f3e7d1]" : "border-[#dfd1b8] bg-[#f5ecdd] text-[#a28b67] pointer-events-none"}`}
-          >
-            Ver más
-          </Link>
-        </div>
+        ) : (
+          <LibraryGrid books={filteredBooks} />
+        )}
       </section>
     </main>
   )

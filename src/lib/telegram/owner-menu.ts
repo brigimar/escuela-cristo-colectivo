@@ -175,11 +175,13 @@ export function buildOwnerPdfsText() {
     "Biblioteca",
     "",
     "Funciones reales disponibles:",
+    "- subir un nuevo PDF",
     "- ver libros publicados, ocultos y todos",
     "- ver detalle",
     "- publicar u ocultar",
-    "- editar titulo y descripcion",
-    "- marcar recomendado",
+    "- editar titulo, descripcion, autor y categoria",
+    "- editar portada URL y orden",
+    "- marcar o quitar destacado",
   ].join("\n")
 }
 
@@ -316,6 +318,7 @@ export const OWNER_READING_MENU_BUTTONS: InlineKeyboardMarkup = {
 
 export const OWNER_PDFS_MENU_BUTTONS: InlineKeyboardMarkup = {
   inline_keyboard: [
+    [{ text: "Subir nuevo PDF", callback_data: "owner:pdfs:start" }],
     [{ text: "Ver publicados", callback_data: "owner:lib:list:p:0" }],
     [{ text: "Ver ocultos", callback_data: "owner:lib:list:h:0" }],
     [{ text: "Ver todos", callback_data: "owner:lib:list:a:0" }],
@@ -389,8 +392,12 @@ export function buildOwnerPdfDraftEditorText(params: {
   title: string
   description: string
   author: string
+  category: string
+  coverUrl: string
+  sortOrder: number | null
+  isFeatured: boolean
   hasFile: boolean
-  awaitingField: "title" | "description" | "author" | null
+  awaitingField: "title" | "description" | "author" | "category" | "cover_url" | "sort_order" | null
 }) {
   const hint =
     params.awaitingField === "title"
@@ -399,7 +406,13 @@ export function buildOwnerPdfDraftEditorText(params: {
         ? "Envia ahora la descripcion. Usa - para vaciar."
         : params.awaitingField === "author"
           ? "Envia ahora el autor. Usa - para vaciar."
-          : "Edita campos y confirma."
+          : params.awaitingField === "category"
+            ? "Envia ahora la categoria. Usa - para volver a General."
+            : params.awaitingField === "cover_url"
+              ? "Envia ahora la URL de portada. Usa - para volver a la portada por defecto."
+              : params.awaitingField === "sort_order"
+                ? "Envia ahora un numero entero para el orden."
+                : "Edita campos y confirma."
 
   return [
     "Libros / PDFs",
@@ -409,6 +422,10 @@ export function buildOwnerPdfDraftEditorText(params: {
     `Titulo: ${params.title || "—"}`,
     `Descripcion: ${params.description || "—"}`,
     `Autor: ${params.author || "—"}`,
+    `Categoria: ${params.category || "General"}`,
+    `Portada URL: ${params.coverUrl || "—"}`,
+    `Orden: ${typeof params.sortOrder === "number" ? String(params.sortOrder) : "9999"}`,
+    `Destacado: ${params.isFeatured ? "Si" : "No"}`,
     "",
     hint,
   ].join("\n")
@@ -420,6 +437,10 @@ export function buildOwnerPdfDraftEditorKeyboard(): InlineKeyboardMarkup {
       [{ text: "Editar titulo", callback_data: "owner:pdfs:draft:field:title" }],
       [{ text: "Editar descripcion", callback_data: "owner:pdfs:draft:field:description" }],
       [{ text: "Editar autor", callback_data: "owner:pdfs:draft:field:author" }],
+      [{ text: "Editar categoria", callback_data: "owner:pdfs:draft:field:category" }],
+      [{ text: "Editar portada URL", callback_data: "owner:pdfs:draft:field:cover_url" }],
+      [{ text: "Editar orden", callback_data: "owner:pdfs:draft:field:sort_order" }],
+      [{ text: "Alternar destacado", callback_data: "owner:pdfs:draft:toggle:featured" }],
       [{ text: "Confirmar publicacion", callback_data: "owner:pdfs:confirm" }],
       [{ text: "Cancelar carga", callback_data: "owner:pdfs:cancel" }],
       [
@@ -576,13 +597,13 @@ export function buildOwnerReadingEditorKeyboard(): InlineKeyboardMarkup {
 }
 
 export function buildOwnerPdfListKeyboard(
-  items: Array<{ id: string; title: string; is_recommended?: boolean | null }>,
+  items: Array<{ id: string; title: string; is_featured?: boolean | null }>,
   listType: LibraryListType,
   params: { offset: number; pageSize: number; hasNext: boolean }
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = items.map((item, index) => [
     {
-      text: `${index + 1}. ${(item.is_recommended ? "[Rec] " : "")}${item.title.slice(0, 46)}`,
+      text: `${index + 1}. ${(item.is_featured ? "[Dest] " : "")}${item.title.slice(0, 46)}`,
       callback_data: `owner:lib:detail:${encodeLibraryListType(listType)}:${item.id}:${params.offset}`,
     },
   ])
@@ -606,22 +627,26 @@ export function buildOwnerPdfListKeyboard(
 
 export function buildOwnerPdfDetailKeyboard(
   pdfId: string,
-  state: { isPublished: boolean; isHidden: boolean; isRecommended: boolean },
+  state: { isPublished: boolean; isHidden: boolean; isFeatured: boolean },
   listType: LibraryListType,
   offset: number
 ): InlineKeyboardMarkup {
   const rows: InlineKeyboardButton[][] = []
   rows.push([{ text: "Editar titulo", callback_data: `owner:lib:edit:title:${pdfId}` }])
   rows.push([{ text: "Editar descripcion", callback_data: `owner:lib:edit:desc:${pdfId}` }])
+  rows.push([{ text: "Editar autor", callback_data: `owner:lib:edit:author:${pdfId}` }])
+  rows.push([{ text: "Editar categoria", callback_data: `owner:lib:edit:category:${pdfId}` }])
+  rows.push([{ text: "Editar portada URL", callback_data: `owner:lib:edit:cover:${pdfId}` }])
+  rows.push([{ text: "Editar orden", callback_data: `owner:lib:edit:sort:${pdfId}` }])
   rows.push([
     state.isHidden || !state.isPublished
       ? { text: "Publicar", callback_data: `owner:lib:act:pub:${pdfId}:${encodeLibraryListType(listType)}:${offset}` }
       : { text: "Ocultar", callback_data: `owner:lib:act:hid:${pdfId}:${encodeLibraryListType(listType)}:${offset}` },
   ])
   rows.push([
-    state.isRecommended
-      ? { text: "Quitar recomendado", callback_data: `owner:lib:act:unrec:${pdfId}:${encodeLibraryListType(listType)}:${offset}` }
-      : { text: "Marcar recomendado", callback_data: `owner:lib:act:rec:${pdfId}:${encodeLibraryListType(listType)}:${offset}` },
+    state.isFeatured
+      ? { text: "Quitar destacado", callback_data: `owner:lib:act:unfeat:${pdfId}:${encodeLibraryListType(listType)}:${offset}` }
+      : { text: "Marcar destacado", callback_data: `owner:lib:act:feat:${pdfId}:${encodeLibraryListType(listType)}:${offset}` },
   ])
   rows.push([
     { text: "Volver", callback_data: `owner:lib:list:${encodeLibraryListType(listType)}:${offset}` },

@@ -28,8 +28,7 @@ import {
   listLibraryPdfsForOwner,
   publishLibraryPdf,
   hideLibraryPdf,
-  setLibraryPdfRecommended,
-  clearLibraryPdfRecommended,
+  setLibraryPdfFeatured,
   savePdfEditorContext,
   updateLibraryPdfMetadata,
 } from "@/features/library/queries"
@@ -133,6 +132,8 @@ type TelegramUpdate = {
 type TelegramReplyMarkup =
   | { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }
   | { remove_keyboard: true }
+
+type PendingPdfAwaitingField = "title" | "description" | "author" | "category" | "cover_url" | "sort_order"
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const { TELEGRAM_BOT_TOKEN } = loadServerEnv()
@@ -269,14 +270,38 @@ function buildAnswerListText(title: string, answers: Array<{ title: string; crea
 
 function buildLibraryListText(
   title: string,
-  items: Array<{ title: string; created_at: string; author: string | null; is_recommended: boolean }>
+  items: Array<{ title: string; created_at: string; author: string | null; is_featured: boolean }>
 ) {
   return `${title}\n\n${items
     .map(
       (item, index) =>
-        `${index + 1}. ${item.is_recommended ? "[Rec] " : ""}${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "â€”"}`
+        `${index + 1}. ${item.is_featured ? "[Dest] " : ""}${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "â€”"}`
     )
     .join("\n\n")}`
+}
+
+function normalizePendingPdfAwaitingField(value: string | null | undefined): PendingPdfAwaitingField | null {
+  if (
+    value === "title" ||
+    value === "description" ||
+    value === "author" ||
+    value === "category" ||
+    value === "cover_url" ||
+    value === "sort_order"
+  ) {
+    return value
+  }
+  return null
+}
+
+function buildPdfFieldPrompt(field: PendingPdfAwaitingField, mode: "draft" | "published") {
+  const intro = mode === "draft" ? "Libros / PDFs" : "Editar libro"
+  if (field === "title") return `${intro}\n\nEnvia ahora el titulo.`
+  if (field === "description") return `${intro}\n\nEnvia ahora la descripcion. Usa - para vaciar.`
+  if (field === "author") return `${intro}\n\nEnvia ahora el autor. Usa - para vaciar.`
+  if (field === "category") return `${intro}\n\nEnvia ahora la categoria. Usa - para volver a General.`
+  if (field === "cover_url") return `${intro}\n\nEnvia ahora la URL de portada. Usa - para volver a la portada por defecto.`
+  return `${intro}\n\nEnvia ahora un numero entero para el orden.`
 }
 
 async function loadLibraryPage(listType: LibraryListType, offset: number) {
@@ -323,7 +348,7 @@ async function renderPdfDraftEditor(params: {
 }) {
   const pendingPdf = await supabaseService
     .from("telegram_pending_pdf")
-    .select("file_id, draft_title, draft_description, draft_author, awaiting_field")
+    .select("file_id, draft_title, draft_description, draft_author, draft_category, draft_cover_url, draft_sort_order, draft_is_featured, awaiting_field")
     .eq("chat_id", params.chatId)
     .eq("from_id", params.fromId)
     .maybeSingle()
@@ -338,12 +363,7 @@ async function renderPdfDraftEditor(params: {
     return
   }
 
-  const awaitingField =
-    pendingPdf.data.awaiting_field === "title" ||
-    pendingPdf.data.awaiting_field === "description" ||
-    pendingPdf.data.awaiting_field === "author"
-      ? pendingPdf.data.awaiting_field
-      : null
+  const awaitingField = normalizePendingPdfAwaitingField(pendingPdf.data.awaiting_field)
 
   await sendOrEditTelegramMessage({
     chatId: params.chatId,
@@ -353,6 +373,10 @@ async function renderPdfDraftEditor(params: {
       title: pendingPdf.data.draft_title || "",
       description: pendingPdf.data.draft_description || "",
       author: pendingPdf.data.draft_author || "",
+      category: pendingPdf.data.draft_category || "General",
+      coverUrl: pendingPdf.data.draft_cover_url || "/images/library/library-default-cover.svg",
+      sortOrder: typeof pendingPdf.data.draft_sort_order === "number" ? pendingPdf.data.draft_sort_order : 9999,
+      isFeatured: Boolean(pendingPdf.data.draft_is_featured),
       awaitingField,
     }),
     replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
@@ -395,15 +419,18 @@ async function renderPdfDetail(params: {
       "",
       `Titulo: ${item.title}`,
       `Autor: ${item.author || "â€”"}`,
+      `Categoria: ${item.category || "General"}`,
       `Descripcion: ${item.description || "â€”"}`,
+      `Orden: ${item.sort_order}`,
+      `Destacado: ${item.is_featured ? "Si" : "No"}`,
       `Estado: ${statusLabel}`,
-      `Recomendado: ${item.is_recommended ? "Si" : "No"}`,
       `Fecha: ${formatTelegramDate(item.created_at)}`,
+      `Portada URL: ${item.cover_url || "â€”"}`,
       `URL publica: ${item.public_url || "â€”"}`,
     ].join("\n"),
     replyMarkup: buildOwnerPdfDetailKeyboard(
       item.id,
-      { isPublished: item.is_published, isHidden: item.is_hidden, isRecommended: item.is_recommended },
+      { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
       params.listType,
       params.offset
     ),
@@ -541,6 +568,10 @@ async function publishPendingPdf(params: {
   title: string
   description: string
   author: string
+  category: string
+  coverUrl: string
+  sortOrder: number
+  isFeatured: boolean
 }) {
   const filePath = await getTelegramFilePath(params.fileId)
   if (!filePath) return { ok: false as const, reason: "file_path" }
@@ -570,10 +601,14 @@ async function publishPendingPdf(params: {
     title: params.title,
     description: params.description,
     author: params.author,
+    category: params.category,
+    cover_url: params.coverUrl,
     storage_path: storagePath,
     public_url: publicUrl,
     mime_type: params.mimeType || "application/pdf",
     size_bytes: params.sizeBytes,
+    is_featured: params.isFeatured,
+    sort_order: params.sortOrder,
     actor,
   })
 
@@ -1005,6 +1040,171 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
+    if (callbackData === "owner:pdfs" || callbackData === "owner:pdfs:start") {
+      await clearPdfEditorContext(chatId, fromId)
+      if (callbackData === "owner:pdfs:start") {
+        await clearPendingPdf(chatId)
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: buildOwnerPdfAwaitingFileText(),
+          replyMarkup: OWNER_PDF_AWAITING_FILE_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await renderPdfDraftEditor({
+        chatId,
+        messageId: callbackMessageId,
+        fromId,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:cancel") {
+      await clearPendingPdf(chatId)
+      await clearPdfEditorContext(chatId, fromId)
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Carga cancelada.\n\nNo hay ningun PDF pendiente.",
+        replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:pdfs:draft:field:")) {
+      const field = normalizePendingPdfAwaitingField(callbackData.split(":")[4] || "")
+      if (!field) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude iniciar la edicion de ese campo.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const updateRes = await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ awaiting_field: field })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      if (updateRes.error) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay un borrador activo para editar.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: buildPdfFieldPrompt(field, "draft"),
+        replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:draft:toggle:featured") {
+      const pendingPdf = await supabaseService
+        .from("telegram_pending_pdf")
+        .select("draft_is_featured")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (pendingPdf.error || !pendingPdf.data) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay un borrador activo para editar.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_is_featured: !pendingPdf.data.draft_is_featured, awaiting_field: null })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      await renderPdfDraftEditor({
+        chatId,
+        messageId: callbackMessageId,
+        fromId,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:confirm") {
+      const pendingPdf = await supabaseService
+        .from("telegram_pending_pdf")
+        .select("chat_id, from_id, file_id, mime_type, size_bytes, draft_title, draft_description, draft_author, draft_category, draft_cover_url, draft_sort_order, draft_is_featured")
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+        .maybeSingle()
+
+      if (pendingPdf.error || !pendingPdf.data || !pendingPdf.data.file_id || !pendingPdf.data.draft_title) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay una carga lista para publicar. Inicia una nueva carga y completa el borrador.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const publishResult = await publishPendingPdf({
+        chatId,
+        fromId,
+        fromUsername,
+        fileId: pendingPdf.data.file_id,
+        mimeType: pendingPdf.data.mime_type,
+        sizeBytes: pendingPdf.data.size_bytes,
+        title: pendingPdf.data.draft_title,
+        description: pendingPdf.data.draft_description || "",
+        author: pendingPdf.data.draft_author || "",
+        category: pendingPdf.data.draft_category || "General",
+        coverUrl: pendingPdf.data.draft_cover_url || "/images/library/library-default-cover.svg",
+        sortOrder: typeof pendingPdf.data.draft_sort_order === "number" ? pendingPdf.data.draft_sort_order : 9999,
+        isFeatured: Boolean(pendingPdf.data.draft_is_featured),
+      })
+
+      if (!publishResult.ok) {
+        const errorText =
+          publishResult.reason === "file_path"
+            ? "No pude obtener el archivo desde Telegram."
+            : publishResult.reason === "download"
+              ? "No pude descargar el archivo desde Telegram."
+              : publishResult.reason === "upload"
+                ? "No pude subir el PDF a Storage."
+                : "No pude guardar metadata del libro."
+
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: errorText,
+          replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
+        })
+        return new Response("ok")
+      }
+
+      revalidatePath("/biblioteca")
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: `Libro publicado ✅\n\n${pendingPdf.data.draft_title}`,
+        replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
     if (callbackData.startsWith("owner:lib:list:")) {
       const parts = callbackData.split(":")
       const listCode = decodeLibraryListCode(parts[3])
@@ -1059,7 +1259,20 @@ export async function POST(req: Request) {
 
     if (callbackData.startsWith("owner:lib:edit:")) {
       const parts = callbackData.split(":")
-      const field = parts[3] === "title" ? "title" : parts[3] === "desc" ? "description" : null
+      const field =
+        parts[3] === "title"
+          ? "title"
+          : parts[3] === "desc"
+            ? "description"
+            : parts[3] === "author"
+              ? "author"
+              : parts[3] === "category"
+                ? "category"
+                : parts[3] === "cover"
+                  ? "cover_url"
+                  : parts[3] === "sort"
+                    ? "sort_order"
+                    : null
       const pdfId = parts[4] || ""
       if (!field || !pdfId) {
         await sendOrEditTelegramMessage({
@@ -1083,19 +1296,18 @@ export async function POST(req: Request) {
         field,
       })
 
-      const prompt = field === "title" ? "Editar libro\n\nEnvia ahora el nuevo titulo." : "Editar libro\n\nEnvia ahora la nueva descripcion. Usa - para vaciar."
       const current = await getLibraryPdfById(pdfId)
 
       await sendOrEditTelegramMessage({
         chatId,
         messageId: callbackMessageId,
-        text: prompt,
+        text: buildPdfFieldPrompt(field, "published"),
         replyMarkup: buildOwnerPdfDetailKeyboard(
           pdfId,
           {
             isPublished: current?.is_published ?? true,
             isHidden: current?.is_hidden ?? false,
-            isRecommended: current?.is_recommended ?? false,
+            isFeatured: current?.is_featured ?? false,
           },
           listType,
           listOffset
@@ -1118,10 +1330,10 @@ export async function POST(req: Request) {
         ok = await publishLibraryPdf(pdfId, actor)
       } else if (action === "hid") {
         ok = await hideLibraryPdf(pdfId, actor)
-      } else if (action === "rec") {
-        ok = await setLibraryPdfRecommended(pdfId, actor)
-      } else if (action === "unrec") {
-        ok = await clearLibraryPdfRecommended(pdfId, actor)
+      } else if (action === "rec" || action === "feat") {
+        ok = await setLibraryPdfFeatured(pdfId, true, actor)
+      } else if (action === "unrec" || action === "unfeat") {
+        ok = await setLibraryPdfFeatured(pdfId, false, actor)
       }
 
       await clearPdfEditorContext(chatId, fromId)
@@ -1997,6 +2209,10 @@ export async function POST(req: Request) {
         draft_title: null,
         draft_description: null,
         draft_author: null,
+        draft_category: "General",
+        draft_cover_url: "/images/library/library-default-cover.svg",
+        draft_sort_order: 9999,
+        draft_is_featured: false,
         awaiting_field: null,
       }, { onConflict: "chat_id" })
     await clearPdfEditorContext(chatId, fromId)
@@ -2188,7 +2404,7 @@ export async function POST(req: Request) {
 
   const pendingPdf = await supabaseService
     .from("telegram_pending_pdf")
-    .select("draft_title, draft_description, draft_author, awaiting_field")
+    .select("draft_title, draft_description, draft_author, draft_category, draft_cover_url, draft_sort_order, awaiting_field")
     .eq("chat_id", chatId)
     .eq("from_id", fromId)
     .maybeSingle()
@@ -2196,8 +2412,9 @@ export async function POST(req: Request) {
   if (!pendingPdf.error && pendingPdf.data && pendingPdf.data.awaiting_field) {
     const input = text.trim()
     const normalized = input === "-" ? "" : input
+    const awaitingField = normalizePendingPdfAwaitingField(pendingPdf.data.awaiting_field)
 
-    if (pendingPdf.data.awaiting_field === "title") {
+    if (awaitingField === "title") {
       if (!normalized) {
         await sendTelegramMessage(chatId, "Enviame un titulo valido para el PDF.", buildOwnerPdfDraftEditorKeyboard())
         return new Response("ok")
@@ -2212,7 +2429,7 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
-    if (pendingPdf.data.awaiting_field === "description") {
+    if (awaitingField === "description") {
       await supabaseService
         .from("telegram_pending_pdf")
         .update({ draft_description: normalized || null, awaiting_field: null })
@@ -2222,9 +2439,45 @@ export async function POST(req: Request) {
       return new Response("ok")
     }
 
+    if (awaitingField === "author") {
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_author: normalized || null, awaiting_field: null })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+      await renderPdfDraftEditor({ chatId, fromId })
+      return new Response("ok")
+    }
+
+    if (awaitingField === "category") {
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_category: normalized || "General", awaiting_field: null })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+      await renderPdfDraftEditor({ chatId, fromId })
+      return new Response("ok")
+    }
+
+    if (awaitingField === "cover_url") {
+      await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_cover_url: normalized || "/images/library/library-default-cover.svg", awaiting_field: null })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+      await renderPdfDraftEditor({ chatId, fromId })
+      return new Response("ok")
+    }
+
+    const parsedSortOrder = Number(normalized)
+    if (!Number.isFinite(parsedSortOrder) || parsedSortOrder < 0) {
+      await sendTelegramMessage(chatId, "Enviame un numero entero valido para el orden.", buildOwnerPdfDraftEditorKeyboard())
+      return new Response("ok")
+    }
+
     await supabaseService
       .from("telegram_pending_pdf")
-      .update({ draft_author: normalized || null, awaiting_field: null })
+      .update({ draft_sort_order: Math.floor(parsedSortOrder), awaiting_field: null })
       .eq("chat_id", chatId)
       .eq("from_id", fromId)
     await renderPdfDraftEditor({ chatId, fromId })
@@ -2252,7 +2505,7 @@ export async function POST(req: Request) {
         errorText,
         buildOwnerPdfDetailKeyboard(
           item.id,
-          { isPublished: item.is_published, isHidden: item.is_hidden, isRecommended: item.is_recommended },
+          { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
           listType,
           listOffset
         )
