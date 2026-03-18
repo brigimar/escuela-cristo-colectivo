@@ -4,6 +4,7 @@ import { Channels as Canales } from "@/features/home/components/Canales";
 import { VideoRecomendado } from "@/features/home/components/VideoRecomendado";
 import { PreguntasAudiencia } from "@/features/home/components/PreguntasAudiencia";
 import { RecentTeachings } from "@/features/home/components/RecentTeachings";
+import { getLibraryBooks } from "@/features/library/data";
 import { Icon, PrimaryButton, SecondaryButton, SectionHeader, Surface } from "@/features/home/components/ui";
 import * as videoQueries from "@/features/videos/queries";
 type AnyVideo = Record<string, any>;
@@ -59,6 +60,8 @@ async function getLatestVideos(limit = 4) {
 
 export default async function Page() {
   const latest = await getLatestVideos(8);
+  const libraryBooks = await getLibraryBooks();
+  const libraryPreview = libraryBooks.slice(0, 3);
   const state = await videoQueries.getSiteState().catch(() => null);
   const latestVideo = await videoQueries.getLatestVideo().catch(() => null);
   const activeLatestVideoId = state?.is_live ? latestVideo?.youtube_video_id ?? null : null;
@@ -123,30 +126,39 @@ export default async function Page() {
             <SectionHeader
               eyebrow="Estudio"
               title="Biblioteca"
-              desc="Organización para leer, escuchar y volver a repasar."
+              desc="Catálogo real de libros en PDF, gestionado desde el flujo editorial."
             />
 
             <div className="mt-10 grid gap-4 md:grid-cols-3">
-              {[
-                { icon: "bookmark", title: "Listas y series", desc: "Agrupación por series/temas (próximamente)." },
-                { icon: "search", title: "Búsqueda", desc: "Búsqueda rápida por título y palabras clave (próximamente)." },
-                { icon: "share", title: "Compartir", desc: "Links directos por enseñanza para grupos y amigos." },
-              ].map((x) => (
-                <Surface key={x.title} className="p-6 bg-[#fffbf3] border-[#d7c49e]">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-[#efe2c4] text-[#6c5527]">
-                      <Icon name={x.icon} className="text-[22px]" />
-                    </span>
-                    <h3 className="text-lg font-semibold">{x.title}</h3>
-                  </div>
-                  <p className="mt-3 text-[#5a4d36]">{x.desc}</p>
+              {libraryPreview.length > 0 ? (
+                libraryPreview.map((book) => (
+                  <Surface key={book.id} className="p-6 bg-[#fffbf3] border-[#d7c49e]">
+                    <div className="flex items-center gap-2 text-xs text-[#5f5a4f]">
+                      <span className="inline-flex items-center rounded-full border border-[#d8c4a0] bg-[#f7f0e1] px-3 py-1 font-medium">{book.category}</span>
+                      <span className="inline-flex items-center rounded-full border border-[#d6cfbe] bg-[#f7f3ea] px-3 py-1 font-medium">{book.author}</span>
+                    </div>
+                    <h3 className="mt-3 text-lg font-semibold text-[#1f1a12]">{book.title}</h3>
+                    <p className="mt-2 line-clamp-3 text-sm text-[#5a4d36]">{book.description}</p>
+                    <a
+                      className="mt-4 inline-flex text-sm font-medium text-[#6c5527] underline decoration-[#b8921f] underline-offset-2 transition-colors hover:text-[#4d3b1f]"
+                      href={book.pdf_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Descargar PDF
+                    </a>
+                  </Surface>
+                ))
+              ) : (
+                <Surface className="p-6 bg-[#fffbf3] border-[#d7c49e] md:col-span-3">
+                  <p className="text-sm text-[#5a4d36]">La Biblioteca se está actualizando. Pronto habrá libros disponibles.</p>
                 </Surface>
-              ))}
+              )}
             </div>
 
             <div className="mt-9 flex justify-center">
-              <SecondaryButton href="/videos" icon="library_books">
-                Ir a / libros
+              <SecondaryButton href="/biblioteca" icon="library_books">
+                Abrir catálogo completo
               </SecondaryButton>
             </div>
           </div>
@@ -177,7 +189,7 @@ export default async function Page() {
                 <PrimaryButton href="#ensenanzas" icon="arrow_upward">
                   Ir a enseñanzas
                 </PrimaryButton>
-                <SecondaryButton href="/videos" icon="video_library">
+                <SecondaryButton href="/biblioteca" icon="video_library">
                   Abrir biblioteca
                 </SecondaryButton>
               </div>
@@ -189,6 +201,4 @@ export default async function Page() {
     </>
   );
 }
-
-
 

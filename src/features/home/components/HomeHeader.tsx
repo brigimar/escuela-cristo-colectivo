@@ -12,7 +12,7 @@ function cn(...parts: Array<string | false | null | undefined>) {
 const navItems = [
   { href: "#ensenanzas", label: "Enseñanzas" },
   { href: "#preguntas", label: "Preguntas" },
-  { href: "#biblioteca", label: "Biblioteca" },
+  { href: "/biblioteca", label: "Biblioteca" },
   { href: "/#donaciones", label: "Donaciones" },
   { href: "/#canales", label: "Canales" },
   { href: "#manifiesto", label: "Manifiesto" },

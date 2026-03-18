@@ -15,7 +15,7 @@ export function PublicFooter() {
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[#c8b894]">
             <a className="transition-colors hover:text-[#f9f1df]" href="#ensenanzas">Enseñanzas</a>
             <a className="transition-colors hover:text-[#f9f1df]" href="#preguntas">Preguntas</a>
-            <a className="transition-colors hover:text-[#f9f1df]" href="#biblioteca">Biblioteca</a>
+            <a className="transition-colors hover:text-[#f9f1df]" href="/biblioteca">Biblioteca</a>
             <a className="transition-colors hover:text-[#f9f1df]" href="#donaciones">Donaciones</a>
             <a className="transition-colors hover:text-[#f9f1df]" href="#canales">Canales</a>
             <a className="transition-colors hover:text-[#f9f1df]" href="#manifiesto">Manifiesto</a>

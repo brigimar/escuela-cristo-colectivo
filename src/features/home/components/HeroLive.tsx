@@ -101,7 +101,7 @@ export default function HeroLive({ isLive, latestVideo }: HeroLiveProps) {
             </Link>
 
             <Link
-              href="/videos"
+              href="/biblioteca"
               className={`${SECONDARY_BUTTON_CLASS} w-full sm:w-auto`}
               aria-label="Ir a la biblioteca"
             >
