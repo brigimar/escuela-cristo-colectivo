@@ -1,4 +1,4 @@
-﻿import { revalidatePath } from "next/cache"
+import { revalidatePath } from "next/cache"
 import { loadServerEnv } from "@/lib/env/server"
 import { getVideoRecommendation, setVideoRecommendationByYoutubeId } from "@/features/recommendation/queries"
 import {
@@ -99,6 +99,7 @@ import {
   OWNER_HELP_MENU_BUTTONS,
   OWNER_MAIN_MENU_BUTTONS,
   OWNER_PDF_AWAITING_FILE_BUTTONS,
+  OWNER_PDF_AWAITING_COVER_BUTTONS,
   OWNER_PDFS_MENU_BUTTONS,
   OWNER_QUESTIONS_MENU_BUTTONS,
   OWNER_READING_MENU_BUTTONS,
@@ -115,6 +116,7 @@ type TelegramMessage = {
   voice?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number }
   audio?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number }
   document?: { file_id?: string; file_unique_id?: string; mime_type?: string; file_size?: number; file_name?: string }
+  photo?: Array<{ file_id?: string; file_unique_id?: string; file_size?: number; width?: number; height?: number }>
 }
 
 type TelegramCallbackQuery = {
@@ -134,6 +136,8 @@ type TelegramReplyMarkup =
   | { remove_keyboard: true }
 
 type PendingPdfAwaitingField = "title" | "description" | "author" | "category" | "cover_url" | "sort_order"
+const DEFAULT_LIBRARY_COVER_URL = "/images/library/library-default-cover.svg"
+const LIBRARY_COVER_BUCKET = "portadas-libros"
 
 async function callTelegram(method: string, payload: Record<string, unknown>) {
   const { TELEGRAM_BOT_TOKEN } = loadServerEnv()
@@ -268,16 +272,8 @@ function buildAnswerListText(title: string, answers: Array<{ title: string; crea
     .join("\n\n")}`
 }
 
-function buildLibraryListText(
-  title: string,
-  items: Array<{ title: string; created_at: string; author: string | null; is_featured: boolean }>
-) {
-  return `${title}\n\n${items
-    .map(
-      (item, index) =>
-        `${index + 1}. ${item.is_featured ? "[Dest] " : ""}${item.title}\n${formatTelegramDate(item.created_at)}\n${item.author || "â€”"}`
-    )
-    .join("\n\n")}`
+function buildLibraryListText(title: string) {
+  return `${title}\n\nElegí un libro para ver detalle o usa Anterior/Siguiente.`
 }
 
 function normalizePendingPdfAwaitingField(value: string | null | undefined): PendingPdfAwaitingField | null {
@@ -300,17 +296,31 @@ function buildPdfFieldPrompt(field: PendingPdfAwaitingField, mode: "draft" | "pu
   if (field === "description") return `${intro}\n\nEnvia ahora la descripcion. Usa - para vaciar.`
   if (field === "author") return `${intro}\n\nEnvia ahora el autor. Usa - para vaciar.`
   if (field === "category") return `${intro}\n\nEnvia ahora la categoria. Usa - para volver a General.`
-  if (field === "cover_url") return `${intro}\n\nEnvia ahora la URL de portada. Usa - para volver a la portada por defecto.`
+  if (field === "cover_url") {
+    return `${intro}\n\nEnvia la portada como imagen (foto o documento imagen). También puedes enviar URL. Usa - para volver a la portada por defecto.`
+  }
   return `${intro}\n\nEnvia ahora un numero entero para el orden.`
 }
 
 async function loadLibraryPage(listType: LibraryListType, offset: number) {
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0
   const limit = PAGE_SIZE + 1
-  const list = await listLibraryPdfsForOwner(listType, limit, safeOffset)
+  const [list, countRes] = await Promise.all([
+    listLibraryPdfsForOwner(listType, limit, safeOffset),
+    (async () => {
+      let countQuery = supabaseService.from("library_pdfs").select("*", { count: "exact", head: true })
+      if (listType === "published") countQuery = countQuery.eq("is_published", true).eq("is_hidden", false)
+      else if (listType === "hidden") countQuery = countQuery.eq("is_hidden", true)
+      const res = await countQuery
+      return typeof res.count === "number" ? res.count : 0
+    })(),
+  ])
   const hasNext = list.length > PAGE_SIZE
   const visible = list.slice(0, PAGE_SIZE)
-  return { visible, hasNext, offset: safeOffset }
+  const total = countRes
+  const page = Math.floor(safeOffset / PAGE_SIZE) + 1
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  return { visible, hasNext, offset: safeOffset, total, page, pages }
 }
 function trimForTelegram(value: string | null | undefined, max = 800) {
   const text = (value || "").trim()
@@ -374,7 +384,7 @@ async function renderPdfDraftEditor(params: {
       description: pendingPdf.data.draft_description || "",
       author: pendingPdf.data.draft_author || "",
       category: pendingPdf.data.draft_category || "General",
-      coverUrl: pendingPdf.data.draft_cover_url || "/images/library/library-default-cover.svg",
+      coverUrl: pendingPdf.data.draft_cover_url || DEFAULT_LIBRARY_COVER_URL,
       sortOrder: typeof pendingPdf.data.draft_sort_order === "number" ? pendingPdf.data.draft_sort_order : 9999,
       isFeatured: Boolean(pendingPdf.data.draft_is_featured),
       awaitingField,
@@ -456,6 +466,30 @@ function extensionFromMime(mimeType?: string | null, sourceKind?: string) {
   if (mimeType === "audio/wav") return "wav"
   if (sourceKind === "voice") return "ogg"
   return "bin"
+}
+
+function extensionFromImageMime(mimeType?: string | null) {
+  if (mimeType === "image/jpeg" || mimeType === "image/jpg") return "jpg"
+  if (mimeType === "image/png") return "png"
+  if (mimeType === "image/webp") return "webp"
+  return null
+}
+
+function extensionFromFilePath(filePath: string) {
+  const match = filePath.toLowerCase().match(/\.([a-z0-9]+)(?:\?|$)/)
+  return match?.[1] || null
+}
+
+function inferImageMimeType(ext: string | null, fallbackMime?: string | null) {
+  if (fallbackMime && fallbackMime.startsWith("image/")) return fallbackMime
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg"
+  if (ext === "png") return "image/png"
+  if (ext === "webp") return "image/webp"
+  return null
+}
+
+function isSupportedImageExt(ext: string | null) {
+  return ext === "jpg" || ext === "jpeg" || ext === "png" || ext === "webp"
 }
 
 async function getTelegramFilePath(fileId: string): Promise<string | null> {
@@ -618,6 +652,171 @@ async function publishPendingPdf(params: {
   return { ok: true as const }
 }
 
+async function uploadLibraryCoverFromTelegram(params: {
+  fileId: string
+  mimeType?: string | null
+  sourceFileName?: string | null
+}) {
+  const filePath = await getTelegramFilePath(params.fileId)
+  if (!filePath) return { ok: false as const, reason: "file_path" }
+
+  const bytes = await downloadTelegramFile(filePath)
+  if (!bytes) return { ok: false as const, reason: "download" }
+
+  const extFromMime = extensionFromImageMime(params.mimeType)
+  const extFromPath = extensionFromFilePath(filePath)
+  const extFromName = extensionFromFilePath(params.sourceFileName || "")
+  const ext = extFromMime || extFromPath || extFromName
+
+  if (!isSupportedImageExt(ext)) {
+    return { ok: false as const, reason: "unsupported_type" }
+  }
+
+  const contentType = inferImageMimeType(ext, params.mimeType)
+  if (!contentType || !contentType.startsWith("image/")) {
+    return { ok: false as const, reason: "unsupported_type" }
+  }
+
+  const now = new Date()
+  const yyyy = String(now.getUTCFullYear())
+  const mm = String(now.getUTCMonth() + 1).padStart(2, "0")
+  const uuid = crypto.randomUUID()
+  const storagePath = `${yyyy}/${mm}/${uuid}.${ext === "jpeg" ? "jpg" : ext}`
+
+  const upload = await supabaseService.storage
+    .from(LIBRARY_COVER_BUCKET)
+    .upload(storagePath, bytes, { contentType, upsert: false })
+
+  if (upload.error) return { ok: false as const, reason: "upload" }
+
+  const publicUrlData = supabaseService.storage.from(LIBRARY_COVER_BUCKET).getPublicUrl(storagePath)
+  const publicUrl = publicUrlData?.data?.publicUrl || null
+  if (!publicUrl) return { ok: false as const, reason: "public_url" }
+
+  return { ok: true as const, publicUrl }
+}
+
+async function handleOwnerCoverUpload(params: {
+  chatId: number
+  fromId: number
+  fromUsername: string | null
+  fileId: string
+  mimeType?: string | null
+  sourceFileName?: string | null
+}) {
+  const [pendingPdfPrompt, pdfEditor] = await Promise.all([
+    supabaseService
+      .from("telegram_pending_pdf")
+      .select("awaiting_field")
+      .eq("chat_id", params.chatId)
+      .eq("from_id", params.fromId)
+      .maybeSingle(),
+    getPdfEditorContext(params.chatId, params.fromId),
+  ])
+
+  const pendingAwaitingField = normalizePendingPdfAwaitingField(pendingPdfPrompt.data?.awaiting_field)
+  const shouldApplyToPending = !pendingPdfPrompt.error && pendingAwaitingField === "cover_url"
+  const shouldApplyToPublished = Boolean(pdfEditor?.field === "cover_url")
+
+  if (!shouldApplyToPending && !shouldApplyToPublished) {
+    return { handled: false as const }
+  }
+
+  const uploadResult = await uploadLibraryCoverFromTelegram({
+    fileId: params.fileId,
+    mimeType: params.mimeType || null,
+    sourceFileName: params.sourceFileName || null,
+  })
+
+  if (!uploadResult.ok) {
+    const errorText =
+      uploadResult.reason === "unsupported_type"
+        ? "Solo acepto imágenes JPG, PNG o WEBP para la portada."
+        : uploadResult.reason === "file_path"
+          ? "No pude obtener la imagen desde Telegram."
+          : uploadResult.reason === "download"
+            ? "No pude descargar la imagen desde Telegram."
+            : uploadResult.reason === "upload"
+              ? "No pude subir la portada a Storage."
+              : "No pude generar la URL pública de la portada."
+
+    if (shouldApplyToPending) {
+      await sendTelegramMessage(params.chatId, errorText, OWNER_PDF_AWAITING_COVER_BUTTONS)
+    } else if (pdfEditor) {
+      const item = await getLibraryPdfById(pdfEditor.pdf_id)
+      const listType = libraryListTypeFromCode(pdfEditor.list_type)
+      const listOffset = pdfEditor.list_offset ?? 0
+      await sendTelegramMessage(
+        params.chatId,
+        errorText,
+        item
+          ? buildOwnerPdfDetailKeyboard(
+              item.id,
+              { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
+              listType,
+              listOffset
+            )
+          : OWNER_PDFS_MENU_BUTTONS
+      )
+    }
+    return { handled: true as const }
+  }
+
+  if (shouldApplyToPending) {
+    await supabaseService
+      .from("telegram_pending_pdf")
+      .update({
+        draft_cover_url: uploadResult.publicUrl,
+        awaiting_field: null,
+      })
+      .eq("chat_id", params.chatId)
+      .eq("from_id", params.fromId)
+
+    await sendTelegramMessage(params.chatId, "Portada cargada ✅")
+    await renderPdfDraftEditor({ chatId: params.chatId, fromId: params.fromId })
+    return { handled: true as const }
+  }
+
+  if (!pdfEditor) return { handled: true as const }
+  const item = await getLibraryPdfById(pdfEditor.pdf_id)
+  if (!item) {
+    await clearPdfEditorContext(params.chatId, params.fromId)
+    await sendTelegramMessage(params.chatId, "No pude cargar ese libro.", OWNER_PDFS_MENU_BUTTONS)
+    return { handled: true as const }
+  }
+
+  const actor = params.fromUsername ? `@${params.fromUsername}` : `tg:${params.fromId}`
+  const ok = await updateLibraryPdfMetadata(item.id, "cover_url", uploadResult.publicUrl, actor)
+  const listType = libraryListTypeFromCode(pdfEditor.list_type)
+  const listOffset = pdfEditor.list_offset ?? 0
+
+  if (!ok) {
+    await sendTelegramMessage(
+      params.chatId,
+      "No pude actualizar la portada del libro.",
+      buildOwnerPdfDetailKeyboard(
+        item.id,
+        { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
+        listType,
+        listOffset
+      )
+    )
+    return { handled: true as const }
+  }
+
+  await savePdfEditorContext(params.chatId, params.fromId, { ...pdfEditor, field: null })
+  revalidatePath("/biblioteca")
+  await sendTelegramMessage(params.chatId, "Portada actualizada ✅")
+  await renderPdfDetail({
+    chatId: params.chatId,
+    pdfId: item.id,
+    fromId: params.fromId,
+    listType,
+    offset: listOffset,
+  })
+  return { handled: true as const }
+}
+
 export async function POST(req: Request) {
   const { TELEGRAM_SECRET_TOKEN } = loadServerEnv()
   if (TELEGRAM_SECRET_TOKEN) {
@@ -662,6 +861,8 @@ export async function POST(req: Request) {
   const voice = msg?.voice
   const audio = msg?.audio
   const document = msg?.document
+  const photo = Array.isArray(msg?.photo) ? msg.photo : []
+  const biggestPhoto = photo.length > 0 ? photo[photo.length - 1] : null
 
   if (!chatId || !fromId) return new Response("ok")
 
@@ -1105,7 +1306,58 @@ export async function POST(req: Request) {
         chatId,
         messageId: callbackMessageId,
         text: buildPdfFieldPrompt(field, "draft"),
-        replyMarkup: buildOwnerPdfDraftEditorKeyboard(),
+        replyMarkup: field === "cover_url" ? OWNER_PDF_AWAITING_COVER_BUTTONS : buildOwnerPdfDraftEditorKeyboard(),
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:draft:cover:upload") {
+      const updateRes = await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ awaiting_field: "cover_url" })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      if (updateRes.error) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay un borrador activo para editar.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await sendOrEditTelegramMessage({
+        chatId,
+        messageId: callbackMessageId,
+        text: "Envía la portada del libro como imagen o toca Saltar.",
+        replyMarkup: OWNER_PDF_AWAITING_COVER_BUTTONS,
+      })
+      return new Response("ok")
+    }
+
+    if (callbackData === "owner:pdfs:draft:cover:remove" || callbackData === "owner:pdfs:draft:cover:skip") {
+      const updateRes = await supabaseService
+        .from("telegram_pending_pdf")
+        .update({ draft_cover_url: DEFAULT_LIBRARY_COVER_URL, awaiting_field: null })
+        .eq("chat_id", chatId)
+        .eq("from_id", fromId)
+
+      if (updateRes.error) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No hay un borrador activo para editar.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      await renderPdfDraftEditor({
+        chatId,
+        messageId: callbackMessageId,
+        fromId,
       })
       return new Response("ok")
     }
@@ -1171,7 +1423,7 @@ export async function POST(req: Request) {
         description: pendingPdf.data.draft_description || "",
         author: pendingPdf.data.draft_author || "",
         category: pendingPdf.data.draft_category || "General",
-        coverUrl: pendingPdf.data.draft_cover_url || "/images/library/library-default-cover.svg",
+        coverUrl: pendingPdf.data.draft_cover_url || DEFAULT_LIBRARY_COVER_URL,
         sortOrder: typeof pendingPdf.data.draft_sort_order === "number" ? pendingPdf.data.draft_sort_order : 9999,
         isFeatured: Boolean(pendingPdf.data.draft_is_featured),
       })
@@ -1211,16 +1463,13 @@ export async function POST(req: Request) {
       const listType = listCode ? libraryListTypeFromCode(listCode) : "published"
       const offset = Number(parts[4] || "0")
       const page = await loadLibraryPage(listType, offset)
-      const title = listType === "published" ? "Libros publicados" : listType === "hidden" ? "Libros ocultos" : "Todos los libros"
+      const titleBase = listType === "published" ? "Libros publicados" : listType === "hidden" ? "Libros ocultos" : "Todos los libros"
+      const title = `${titleBase} · página ${page.page}/${page.pages}`
 
       const textItems =
         page.visible.length > 0
-          ? buildLibraryListText(title, page.visible)
-          : listType === "published"
-            ? "No hay libros publicados."
-            : listType === "hidden"
-              ? "No hay libros ocultos."
-              : "No hay libros cargados."
+          ? buildLibraryListText(title)
+          : `${titleBase}\n\nNo hay libros en esta lista.`
 
       await sendOrEditTelegramMessage({
         chatId,
@@ -1255,6 +1504,108 @@ export async function POST(req: Request) {
         offset,
       })
       return new Response("ok")
+    }
+
+    if (callbackData.startsWith("owner:lib:cover:")) {
+      const parts = callbackData.split(":")
+      const action = parts[3] || ""
+      const pdfId = parts[4] || ""
+
+      if (!pdfId) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude identificar el libro.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      const previousContext = await getPdfEditorContext(chatId, fromId)
+      const listType = previousContext ? libraryListTypeFromCode(previousContext.list_type) : "published"
+      const listOffset = previousContext?.list_offset ?? 0
+      const item = await getLibraryPdfById(pdfId)
+
+      if (!item) {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "No pude cargar ese libro.",
+          replyMarkup: OWNER_PDFS_MENU_BUTTONS,
+        })
+        return new Response("ok")
+      }
+
+      if (action === "upload") {
+        await clearPendingPdf(chatId)
+        await savePdfEditorContext(chatId, fromId, {
+          pdf_id: pdfId,
+          list_type: previousContext?.list_type ?? "p",
+          list_offset: listOffset,
+          field: "cover_url",
+        })
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: "Envía la portada como imagen (foto o documento imagen). También puedes enviar URL o - para usar la portada por defecto.",
+          replyMarkup: buildOwnerPdfDetailKeyboard(
+            pdfId,
+            {
+              isPublished: item.is_published,
+              isHidden: item.is_hidden,
+              isFeatured: item.is_featured,
+            },
+            listType,
+            listOffset
+          ),
+        })
+        return new Response("ok")
+      }
+
+      if (action === "remove") {
+        const actor = fromUsername ? `@${fromUsername}` : `tg:${fromId}`
+        const ok = await updateLibraryPdfMetadata(pdfId, "cover_url", "", actor)
+        if (!ok) {
+          await sendOrEditTelegramMessage({
+            chatId,
+            messageId: callbackMessageId,
+            text: "No pude quitar la portada.",
+            replyMarkup: buildOwnerPdfDetailKeyboard(
+              pdfId,
+              { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
+              listType,
+              listOffset
+            ),
+          })
+          return new Response("ok")
+        }
+
+        revalidatePath("/biblioteca")
+        await renderPdfDetail({
+          chatId,
+          messageId: callbackMessageId,
+          pdfId,
+          fromId,
+          listType,
+          offset: listOffset,
+        })
+        return new Response("ok")
+      }
+
+      if (action === "view") {
+        await sendOrEditTelegramMessage({
+          chatId,
+          messageId: callbackMessageId,
+          text: `Portada actual:\n${item.cover_url || DEFAULT_LIBRARY_COVER_URL}`,
+          replyMarkup: buildOwnerPdfDetailKeyboard(
+            pdfId,
+            { isPublished: item.is_published, isHidden: item.is_hidden, isFeatured: item.is_featured },
+            listType,
+            listOffset
+          ),
+        })
+        return new Response("ok")
+      }
     }
 
     if (callbackData.startsWith("owner:lib:edit:")) {
@@ -2151,9 +2502,25 @@ export async function POST(req: Request) {
   }
 
   if (!isOwner(fromId)) {
-    if (text.startsWith("/recomendar") || text.startsWith("/audios") || text.startsWith("/recomendado-web") || voice || audio || document) {
+    if (text.startsWith("/recomendar") || text.startsWith("/audios") || text.startsWith("/recomendado-web") || voice || audio || document || biggestPhoto) {
       await sendTelegramMessage(chatId, "No autorizado")
     }
+    return new Response("ok")
+  }
+
+  if (biggestPhoto?.file_id) {
+    const fileId = (biggestPhoto.file_id || "").trim()
+    const handledCover = await handleOwnerCoverUpload({
+      chatId,
+      fromId,
+      fromUsername,
+      fileId,
+      mimeType: "image/jpeg",
+      sourceFileName: "cover.jpg",
+    })
+    if (handledCover.handled) return new Response("ok")
+
+    await sendTelegramMessage(chatId, "No estoy esperando una portada ahora. Primero abre un borrador o edita un libro.")
     return new Response("ok")
   }
 
@@ -2190,10 +2557,27 @@ export async function POST(req: Request) {
     const fileId = (document.file_id || "").trim()
     const fileUniqueId = (document.file_unique_id || "").trim() || null
     const mimeType = (document.mime_type || "").trim() || null
+    const fileName = (document.file_name || "").trim() || null
     const sizeBytes = typeof document.file_size === "number" ? Number(document.file_size) : null
 
+    const looksLikeImage = (mimeType?.startsWith("image/") ?? false) || isSupportedImageExt(extensionFromFilePath(fileName || ""))
+    if (fileId && looksLikeImage) {
+      const handledCover = await handleOwnerCoverUpload({
+        chatId,
+        fromId,
+        fromUsername,
+        fileId,
+        mimeType,
+        sourceFileName: fileName,
+      })
+      if (handledCover.handled) return new Response("ok")
+
+      await sendTelegramMessage(chatId, "No estoy esperando una portada ahora. Primero abre un borrador o edita un libro.")
+      return new Response("ok")
+    }
+
     if (!fileId || mimeType !== "application/pdf") {
-      await sendTelegramMessage(chatId, "Solo puedo recibir archivos PDF válidos.", OWNER_PDF_AWAITING_FILE_BUTTONS)
+      await sendTelegramMessage(chatId, "Archivo no compatible. Envia un PDF para libros o una imagen valida para portada.")
       return new Response("ok")
     }
 
@@ -2210,13 +2594,13 @@ export async function POST(req: Request) {
         draft_description: null,
         draft_author: null,
         draft_category: "General",
-        draft_cover_url: "/images/library/library-default-cover.svg",
+        draft_cover_url: DEFAULT_LIBRARY_COVER_URL,
         draft_sort_order: 9999,
         draft_is_featured: false,
-        awaiting_field: null,
+        awaiting_field: "cover_url",
       }, { onConflict: "chat_id" })
     await clearPdfEditorContext(chatId, fromId)
-    await renderPdfDraftEditor({ chatId, fromId })
+    await sendTelegramMessage(chatId, "Envía la portada del libro como imagen o toca Saltar.", OWNER_PDF_AWAITING_COVER_BUTTONS)
     return new Response("ok")
   }
 
@@ -2460,9 +2844,21 @@ export async function POST(req: Request) {
     }
 
     if (awaitingField === "cover_url") {
+      if (normalized) {
+        try {
+          const parsed = new URL(normalized)
+          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+            throw new Error("invalid_protocol")
+          }
+        } catch {
+          await sendTelegramMessage(chatId, "La portada debe ser una URL http/https válida o una imagen enviada por Telegram.", OWNER_PDF_AWAITING_COVER_BUTTONS)
+          return new Response("ok")
+        }
+      }
+
       await supabaseService
         .from("telegram_pending_pdf")
-        .update({ draft_cover_url: normalized || "/images/library/library-default-cover.svg", awaiting_field: null })
+        .update({ draft_cover_url: normalized || DEFAULT_LIBRARY_COVER_URL, awaiting_field: null })
         .eq("chat_id", chatId)
         .eq("from_id", fromId)
       await renderPdfDraftEditor({ chatId, fromId })
@@ -2602,6 +2998,3 @@ export async function POST(req: Request) {
 
   return new Response("ok")
 }
-
-
-
